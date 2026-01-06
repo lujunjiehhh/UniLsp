@@ -47,7 +47,7 @@ bin/
 *.hprof
 log/
 samples/
-reference-code/
+#reference-code/
 .kilocode/
 .knowledge/
 .specify/
