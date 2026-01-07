@@ -104,14 +104,15 @@ class UdsDapServer(
 
         running = false
 
-        clients.values.forEach { it.close() }
-        clients.clear()
-
         try {
             serverChannel?.close()
         } catch (e: Exception) {
             log.warn("Error closing DAP UDS server channel", e)
         }
+
+        val clientsSnapshot = clients.values.toList()
+        clientsSnapshot.forEach { it.close() }
+        clients.clear()
 
         try {
             File(socketPath).delete()
@@ -135,6 +136,15 @@ class UdsDapServer(
             try {
                 val clientChannel = withContext(Dispatchers.IO) {
                     channel.accept()
+                }
+
+                if (!running || !channel.isOpen) {
+                    try {
+                        clientChannel.close()
+                    } catch (closeError: Exception) {
+                        log.warn("Error closing DAP UDS client channel after stop", closeError)
+                    }
+                    continue
                 }
 
                 try {

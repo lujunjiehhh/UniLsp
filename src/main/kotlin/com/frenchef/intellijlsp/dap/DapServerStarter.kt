@@ -25,27 +25,44 @@ class DapServerStarter(private val project: Project) {
     private val log = logger<DapServerStarter>()
 
     private val tcpServerSocket = AtomicReference<ServerSocket?>()
+    private val acceptScopeLock = Any()
     private var acceptScope: CoroutineScope? = null
     private val tcpClients = ConcurrentHashMap<Int, ClientConnection>()
     private val clientIdCounter = AtomicInteger(0)
 
     private var udsServer: UdsDapServer? = null
     private var stdioServer: DapServer? = null
+    private val stdioLock = Any()
 
     /**
      * Start TCP DAP server on the given port.
      */
     fun startTcp(port: Int = 5005): Boolean {
-        if (tcpServerSocket.get() != null) {
-            log.warn("DAP TCP server already running")
-            return false
-        }
-
         return try {
             val socket = ServerSocket(port, 50, InetAddress.getLoopbackAddress())
-            tcpServerSocket.set(socket)
-            ensureAcceptScope().launch { acceptConnections(socket) }
-            true
+            if (!tcpServerSocket.compareAndSet(null, socket)) {
+                try {
+                    socket.close()
+                } catch (closeError: Exception) {
+                    log.warn("Error closing redundant DAP TCP server socket", closeError)
+                }
+                log.warn("DAP TCP server already running")
+                return false
+            }
+
+            try {
+                ensureAcceptScope().launch { acceptConnections(socket) }
+                true
+            } catch (e: Exception) {
+                if (tcpServerSocket.compareAndSet(socket, null)) {
+                    try {
+                        socket.close()
+                    } catch (closeError: Exception) {
+                        log.warn("Error closing DAP TCP server socket after failure", closeError)
+                    }
+                }
+                throw e
+            }
         } catch (e: Exception) {
             DapErrors.logTransportError("Failed to start DAP TCP server", e)
             false
@@ -74,18 +91,20 @@ class DapServerStarter(private val project: Project) {
      * Start DAP server over stdio (mainly for VSCode and testing).
      */
     fun startStdio(input: InputStream = System.`in`, output: OutputStream = System.out) {
-        if (stdioServer != null) {
-            log.warn("DAP stdio server already running")
-            return
-        }
+        val server = synchronized(stdioLock) {
+            if (stdioServer != null) {
+                log.warn("DAP stdio server already running")
+                null
+            } else {
+                DapServer(
+                    project = project,
+                    input = input,
+                    output = output,
+                    closeStreamsOnShutdown = false
+                ).also { stdioServer = it }
+            }
+        } ?: return
 
-        val server = DapServer(
-            project = project,
-            input = input,
-            output = output,
-            closeStreamsOnShutdown = false
-        )
-        stdioServer = server
         server.start()
     }
 
@@ -101,17 +120,22 @@ class DapServerStarter(private val project: Project) {
             }
         }
 
-        tcpClients.values.forEach { it.close() }
+        val clientsSnapshot = tcpClients.values.toList()
+        clientsSnapshot.forEach { it.close() }
         tcpClients.clear()
 
         udsServer?.stop()
         udsServer = null
 
-        stdioServer?.stop()
-        stdioServer = null
+        synchronized(stdioLock) {
+            stdioServer?.stop()
+            stdioServer = null
+        }
 
-        acceptScope?.cancel()
-        acceptScope = null
+        synchronized(acceptScopeLock) {
+            acceptScope?.cancel()
+            acceptScope = null
+        }
     }
 
     fun isRunning(): Boolean {
@@ -136,9 +160,17 @@ class DapServerStarter(private val project: Project) {
             return current
         }
 
-        val newScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-        acceptScope = newScope
-        return newScope
+        synchronized(acceptScopeLock) {
+            val existing = acceptScope
+            val existingActive = existing?.coroutineContext?.get(Job)?.isActive == true
+            if (existingActive && existing != null) {
+                return existing
+            }
+
+            val newScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+            acceptScope = newScope
+            return newScope
+        }
     }
 
     private suspend fun acceptConnections(socket: ServerSocket) {
@@ -146,6 +178,15 @@ class DapServerStarter(private val project: Project) {
             try {
                 val clientSocket = withContext(Dispatchers.IO) {
                     socket.accept()
+                }
+
+                if (socket.isClosed || tcpServerSocket.get() != socket) {
+                    try {
+                        clientSocket.close()
+                    } catch (closeError: Exception) {
+                        log.warn("Error closing DAP client socket after stop", closeError)
+                    }
+                    continue
                 }
 
                 try {
