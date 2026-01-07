@@ -134,6 +134,11 @@ class DapServer(
     }
 
     private fun sendInitializedEvent() {
+        if (!session.onInitializedEventSent()) {
+            DapErrors.logProtocolError("Cannot send initialized event in state ${session.getState()}")
+            return
+        }
+
         val event = DapEvent(
             seq = session.nextSeq(),
             event = "initialized",
