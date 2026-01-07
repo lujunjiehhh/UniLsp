@@ -20,6 +20,7 @@ import com.frenchef.intellijlsp.dap.model.DapCommands
 import com.frenchef.intellijlsp.dap.model.DapEvent
 import com.frenchef.intellijlsp.dap.model.DapEvents
 import com.frenchef.intellijlsp.dap.model.DapResponse
+import com.frenchef.intellijlsp.dap.model.BreakpointEventBody
 import com.frenchef.intellijlsp.dap.model.ContinuedEventBody
 import com.frenchef.intellijlsp.dap.model.DapErrorId
 import com.frenchef.intellijlsp.dap.model.DapException
@@ -56,8 +57,6 @@ class DapServer(
     private val closeStreamsOnShutdown: Boolean = true
 ) {
     private val log = logger<DapServer>()
-    private val gson = DapGson.instance
-
     private val session = DapSession()
     private val backend: DebuggerBackend = IntellijDebuggerBackend(project)
     private val router = DapRequestRouter(session)
@@ -103,7 +102,7 @@ class DapServer(
                     DapEvent(
                         seq = session.nextSeq(),
                         event = DapEvents.STOPPED,
-                        body = gson.toJsonTree(body)
+                        body = DapGson.instance.toJsonTree(body)
                     )
                 )
             }
@@ -133,7 +132,7 @@ class DapServer(
                     DapEvent(
                         seq = session.nextSeq(),
                         event = DapEvents.CONTINUED,
-                        body = gson.toJsonTree(body)
+                        body = DapGson.instance.toJsonTree(body)
                     )
                 )
             }
@@ -156,7 +155,7 @@ class DapServer(
                     DapEvent(
                         seq = session.nextSeq(),
                         event = DapEvents.THREAD,
-                        body = gson.toJsonTree(body)
+                        body = DapGson.instance.toJsonTree(body)
                     )
                 )
             }
@@ -184,7 +183,23 @@ class DapServer(
             reason: com.frenchef.intellijlsp.dap.model.BreakpointEventReason,
             breakpoint: com.frenchef.intellijlsp.dap.model.Breakpoint
         ) {
-            log.debug("Breakpoint event received: reason=$reason")
+            if (!running.get()) {
+                return
+            }
+
+            val body = BreakpointEventBody(
+                reason = reason,
+                breakpoint = breakpoint
+            )
+            scope.launch {
+                sendEvent(
+                    DapEvent(
+                        seq = session.nextSeq(),
+                        event = DapEvents.BREAKPOINT,
+                        body = DapGson.instance.toJsonTree(body)
+                    )
+                )
+            }
         }
     }
 
@@ -270,7 +285,7 @@ class DapServer(
 
     private suspend fun sendMessage(message: Any, label: String) {
         try {
-            val json = gson.toJsonTree(message).asJsonObject
+            val json = DapGson.instance.toJsonTree(message).asJsonObject
             withContext(Dispatchers.IO) {
                 messageWriter.writeMessage(json)
             }
@@ -283,7 +298,7 @@ class DapServer(
         val event = DapEvent(
             seq = session.nextSeq(),
             event = DapEvents.INITIALIZED,
-            body = gson.toJsonTree(InitializedEventBody())
+            body = DapGson.instance.toJsonTree(InitializedEventBody())
         )
         sendEvent(event)
         if (!session.onInitializedEventSent()) {

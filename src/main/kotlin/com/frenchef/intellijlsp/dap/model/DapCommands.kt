@@ -29,4 +29,5 @@ object DapEvents {
     const val STOPPED = "stopped"
     const val CONTINUED = "continued"
     const val THREAD = "thread"
+    const val BREAKPOINT = "breakpoint"
 }
