@@ -27,7 +27,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 class DapServer(
     private val project: Project,
     private val input: InputStream,
-    private val output: OutputStream
+    private val output: OutputStream,
+    private val closeStreamsOnShutdown: Boolean = true,
+    private val onExit: (() -> Unit)? = null
 ) {
     
     private val log = logger<DapServer>()
@@ -222,13 +224,27 @@ class DapServer(
                     backend.disconnect(false)
                 }
             }
-            
+
             // Reset session
             session.reset()
-            
+
             DapErrors.logInfo("DAP server shutdown complete")
         } catch (e: Exception) {
             DapErrors.logInternalError("Error during shutdown", e)
+        } finally {
+            if (closeStreamsOnShutdown) {
+                try {
+                    input.close()
+                } catch (e: Exception) {
+                    log.debug("Error closing DAP input stream", e)
+                }
+                try {
+                    output.close()
+                } catch (e: Exception) {
+                    log.debug("Error closing DAP output stream", e)
+                }
+            }
+            onExit?.invoke()
         }
     }
     

@@ -5,7 +5,8 @@ import com.intellij.openapi.project.Project
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.ServerSocket
-import java.net.Socket
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.*
 
@@ -25,8 +26,10 @@ class DapServerStarter(private val project: Project) {
     private val log = logger<DapServerStarter>()
     
     private val serverSocket = AtomicReference<ServerSocket?>()
-    private val currentServer = AtomicReference<DapServer?>()
     private val acceptScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val clients = ConcurrentHashMap<Int, ClientConnection>()
+    private val clientIdCounter = AtomicInteger(0)
+    private val stdioServer = AtomicReference<DapServer?>()
     
     /**
      * Start the DAP server on the specified port.
@@ -73,8 +76,15 @@ class DapServerStarter(private val project: Project) {
             }
         }
         
-        // Stop current server instance
-        currentServer.getAndSet(null)?.stop()
+        // Stop all client connections
+        val snapshot = clients.values.toList()
+        clients.clear()
+        snapshot.forEach { client ->
+            client.server.stop()
+            client.close()
+        }
+
+        stdioServer.getAndSet(null)?.stop()
         
         // Cancel accept coroutine
         acceptScope.cancel()
@@ -95,6 +105,13 @@ class DapServerStarter(private val project: Project) {
     fun getPort(): Int? {
         return serverSocket.get()?.localPort
     }
+
+    /**
+     * Get the current connected client count.
+     */
+    fun getClientCount(): Int {
+        return clients.size
+    }
     
     /**
      * Accept incoming client connections.
@@ -112,17 +129,19 @@ class DapServerStarter(private val project: Project) {
                 log.info("DAP client connected from ${clientSocket.remoteSocketAddress}")
                 DapErrors.logInfo("DAP client connected")
                 
-                // Stop previous server instance if any
-                currentServer.getAndSet(null)?.stop()
-                
-                // Create new server instance
+                val clientId = clientIdCounter.incrementAndGet()
+
                 val server = DapServer(
                     project = project,
                     input = clientSocket.getInputStream(),
-                    output = clientSocket.getOutputStream()
+                    output = clientSocket.getOutputStream(),
+                    closeStreamsOnShutdown = true,
+                    onExit = {
+                        clients.remove(clientId)?.close()
+                    }
                 )
-                
-                currentServer.set(server)
+
+                clients[clientId] = ClientConnection(clientId, clientSocket, server)
                 server.start()
                 
             } catch (e: CancellationException) {
@@ -142,17 +161,38 @@ class DapServerStarter(private val project: Project) {
      * Start a DAP server with stdio transport (for testing or direct invocation).
      */
     fun startStdio(input: InputStream = System.`in`, output: OutputStream = System.out) {
+        if (stdioServer.get() != null) {
+            log.warn("DAP stdio server already running")
+            return
+        }
+
         log.info("Starting DAP server with stdio transport")
         
         val server = DapServer(
             project = project,
             input = input,
-            output = output
+            output = output,
+            closeStreamsOnShutdown = false,
+            onExit = { stdioServer.compareAndSet(server, null) }
         )
-        
-        currentServer.set(server)
+
+        stdioServer.set(server)
         server.start()
         
         DapErrors.logInfo("DAP server started with stdio transport")
+    }
+
+    private inner class ClientConnection(
+        val id: Int,
+        private val socket: java.net.Socket,
+        val server: DapServer
+    ) {
+        fun close() {
+            try {
+                socket.close()
+            } catch (e: Exception) {
+                log.debug("Error closing DAP client $id socket", e)
+            }
+        }
     }
 }
