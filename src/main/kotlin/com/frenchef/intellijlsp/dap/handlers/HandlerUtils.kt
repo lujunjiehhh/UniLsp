@@ -18,3 +18,11 @@ inline fun <reified T> parseArguments(arguments: JsonElement?, commandName: Stri
         )
     }
 }
+
+inline fun <reified T> parseOptionalArguments(arguments: JsonElement?, commandName: String): T {
+    if (arguments == null || arguments.isJsonNull) {
+        return DapGson.instance.fromJson("{}", T::class.java)
+    }
+
+    return parseArguments(arguments, commandName)
+}

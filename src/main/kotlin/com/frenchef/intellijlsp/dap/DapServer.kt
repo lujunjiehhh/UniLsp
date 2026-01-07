@@ -5,8 +5,10 @@ import com.frenchef.intellijlsp.dap.backend.IntellijDebuggerBackend
 import com.frenchef.intellijlsp.dap.handlers.AttachHandler
 import com.frenchef.intellijlsp.dap.handlers.ConfigurationDoneHandler
 import com.frenchef.intellijlsp.dap.handlers.DapRequestRouter
+import com.frenchef.intellijlsp.dap.handlers.DisconnectHandler
 import com.frenchef.intellijlsp.dap.handlers.InitializeHandler
 import com.frenchef.intellijlsp.dap.handlers.LaunchHandler
+import com.frenchef.intellijlsp.dap.handlers.TerminateHandler
 import com.frenchef.intellijlsp.dap.model.DapCommands
 import com.frenchef.intellijlsp.dap.model.DapEvent
 import com.frenchef.intellijlsp.dap.model.DapEvents
@@ -157,6 +159,8 @@ class DapServer(
         router.registerHandler(DapCommands.CONFIGURATION_DONE, ConfigurationDoneHandler(session))
         router.registerHandler(DapCommands.LAUNCH, LaunchHandler(backend))
         router.registerHandler(DapCommands.ATTACH, AttachHandler(backend))
+        router.registerHandler(DapCommands.DISCONNECT, DisconnectHandler(session, backend))
+        router.registerHandler(DapCommands.TERMINATE, TerminateHandler(session, backend))
     }
 
     private fun shutdownOnce() {
