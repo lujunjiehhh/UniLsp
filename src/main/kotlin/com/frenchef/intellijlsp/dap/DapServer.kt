@@ -2,9 +2,16 @@ package com.frenchef.intellijlsp.dap
 
 import com.frenchef.intellijlsp.dap.backend.DebuggerBackend
 import com.frenchef.intellijlsp.dap.backend.IntellijDebuggerBackend
+import com.frenchef.intellijlsp.dap.handlers.AttachHandler
+import com.frenchef.intellijlsp.dap.handlers.ConfigurationDoneHandler
 import com.frenchef.intellijlsp.dap.handlers.DapRequestRouter
 import com.frenchef.intellijlsp.dap.handlers.InitializeHandler
+import com.frenchef.intellijlsp.dap.handlers.LaunchHandler
+import com.frenchef.intellijlsp.dap.model.DapCommands
+import com.frenchef.intellijlsp.dap.model.DapEvent
+import com.frenchef.intellijlsp.dap.model.DapEvents
 import com.frenchef.intellijlsp.dap.model.DapResponse
+import com.frenchef.intellijlsp.dap.model.InitializedEventBody
 import com.frenchef.intellijlsp.protocol.MessageReader
 import com.frenchef.intellijlsp.protocol.MessageWriter
 import com.google.gson.JsonObject
@@ -14,6 +21,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -99,28 +107,56 @@ class DapServer(
         }
     }
 
-    private fun processMessage(json: JsonObject) {
+    private suspend fun processMessage(json: JsonObject) {
         try {
             val response = router.handleMessage(json)
             if (response != null) {
                 sendResponse(response)
+                if (response.command == DapCommands.INITIALIZE && response.success) {
+                    sendInitializedEvent()
+                }
             }
         } catch (e: Exception) {
             DapErrors.logInternalError("Error processing DAP message", e)
         }
     }
 
-    private fun sendResponse(response: DapResponse) {
+    private suspend fun sendResponse(response: DapResponse) {
+        sendMessage(response, "response")
+    }
+
+    private suspend fun sendEvent(event: DapEvent) {
+        sendMessage(event, "event")
+    }
+
+    private suspend fun sendMessage(message: Any, label: String) {
         try {
-            val json = gson.toJsonTree(response).asJsonObject
-            messageWriter.writeMessage(json)
+            val json = gson.toJsonTree(message).asJsonObject
+            withContext(Dispatchers.IO) {
+                messageWriter.writeMessage(json)
+            }
         } catch (e: Exception) {
-            DapErrors.logTransportError("Failed to send DAP response", e)
+            DapErrors.logTransportError("Failed to send DAP $label", e)
+        }
+    }
+
+    private suspend fun sendInitializedEvent() {
+        val event = DapEvent(
+            seq = session.nextSeq(),
+            event = DapEvents.INITIALIZED,
+            body = gson.toJsonTree(InitializedEventBody())
+        )
+        sendEvent(event)
+        if (!session.onInitializedEventSent()) {
+            DapErrors.logInternalError("Failed to transition session state after sending initialized event")
         }
     }
 
     private fun registerHandlers() {
-        router.registerHandler("initialize", InitializeHandler(session))
+        router.registerHandler(DapCommands.INITIALIZE, InitializeHandler(session))
+        router.registerHandler(DapCommands.CONFIGURATION_DONE, ConfigurationDoneHandler(session))
+        router.registerHandler(DapCommands.LAUNCH, LaunchHandler(backend))
+        router.registerHandler(DapCommands.ATTACH, AttachHandler(backend))
     }
 
     private fun shutdownOnce() {
