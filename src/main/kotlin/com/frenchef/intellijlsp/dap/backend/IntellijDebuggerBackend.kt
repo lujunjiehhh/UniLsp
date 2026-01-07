@@ -1,10 +1,31 @@
 package com.frenchef.intellijlsp.dap.backend
 
 import com.frenchef.intellijlsp.dap.model.*
+import com.intellij.debugger.DebugEnvironment
+import com.intellij.debugger.DebuggerGlobalSearchScope
+import com.intellij.debugger.DebuggerManagerEx
+import com.intellij.debugger.engine.DebugProcess
+import com.intellij.debugger.engine.DebugProcessListener
+import com.intellij.debugger.engine.RemoteDebugProcessHandler
+import com.intellij.debugger.engine.SuspendContext
+import com.intellij.debugger.engine.jdi.ThreadReferenceProxy
+import com.intellij.debugger.engine.managerThread.DebuggerCommand
+import com.intellij.debugger.impl.DebuggerSession
+import com.intellij.execution.DefaultExecutionResult
+import com.intellij.execution.ExecutionException
+import com.intellij.execution.ExecutionResult
+import com.intellij.execution.configurations.RemoteConnection
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
+import com.intellij.psi.search.ExecutionSearchScopes
+import com.intellij.psi.search.GlobalSearchScope
+import com.sun.jdi.ThreadReference
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 /**
  * IntelliJ Debugger Backend Implementation
@@ -28,9 +49,61 @@ class IntellijDebuggerBackend(private val project: Project) : DebuggerBackend {
     private val frames = ConcurrentHashMap<Int, FrameInfo>()
     private val variableRefs = ConcurrentHashMap<Int, VariableRefInfo>()
     
+    private val threadIdGenerator = AtomicInteger(0)
+    private val threadIdByUniqueId = ConcurrentHashMap<Long, Int>()
+    private val threadUniqueIdById = ConcurrentHashMap<Int, Long>()
+
     // Session state
     private var isLaunched = false
     private var isAttached = false
+
+    private var debuggerSession: DebuggerSession? = null
+    private var debugProcess: DebugProcess? = null
+
+    @Volatile
+    private var lastSuspendContext: SuspendContext? = null
+
+    @Volatile
+    private var pendingStopReason: StoppedReason? = null
+
+    private val debugProcessListener = object : DebugProcessListener {
+        override fun paused(suspendContext: SuspendContext) {
+            lastSuspendContext = suspendContext
+            val threadId = suspendContext.thread?.let { getOrCreateThreadId(it) }
+            val reason = pendingStopReason ?: StoppedReason.BREAKPOINT
+            pendingStopReason = null
+            eventListener?.onStopped(
+                reason = reason,
+                threadId = threadId,
+                description = null,
+                allThreadsStopped = true,
+                hitBreakpointIds = null
+            )
+        }
+
+        override fun resumed(suspendContext: SuspendContext) {
+            val threadId = suspendContext.thread?.let { getOrCreateThreadId(it) }
+            lastSuspendContext = null
+            if (threadId != null) {
+                eventListener?.onContinued(threadId, true)
+            }
+        }
+
+        override fun processDetached(process: DebugProcess, closedByUser: Boolean) {
+            lastSuspendContext = null
+            eventListener?.onTerminated(false)
+        }
+
+        override fun threadStarted(proc: DebugProcess, thread: ThreadReference) {
+            val threadId = getOrCreateThreadId(thread)
+            eventListener?.onThread(ThreadEventReason.STARTED, threadId)
+        }
+
+        override fun threadStopped(proc: DebugProcess, thread: ThreadReference) {
+            val threadId = getOrCreateThreadId(thread)
+            eventListener?.onThread(ThreadEventReason.EXITED, threadId)
+        }
+    }
     
     // ========================================================================
     // Session Lifecycle
@@ -59,56 +132,139 @@ class IntellijDebuggerBackend(private val project: Project) : DebuggerBackend {
     
     override suspend fun attach(args: AttachRequestArguments): Boolean {
         log.info("Attaching to process: host=${args.hostName}, port=${args.port}, pid=${args.processId}")
-        
-        // TODO: Implement actual attach using IntelliJ's debugger API
-        // This would involve:
-        // 1. Creating a RemoteConfiguration
-        // 2. Connecting to the remote debugger
-        // 3. Setting up event listeners
-        
-        isAttached = true
-        
-        eventListener?.onOutput(
-            OutputCategory.CONSOLE,
-            "Attached to debug session\n",
-            null, null, null
+
+        val host = args.hostName ?: "127.0.0.1"
+        val port = args.port ?: throw DapErrors.invalidArguments("Attach requires a port")
+
+        val connection = RemoteConnection(true, host, port.toString(), false)
+        val environment = DapDebugEnvironment(
+            project = project,
+            remoteConnection = connection,
+            pollTimeout = args.timeout?.toLong() ?: 0L,
+            sessionName = "DAP Attach ${host}:${port}",
+            autoRestart = args.restart == true
         )
-        
+
+        val session = try {
+            DebuggerManagerEx.getInstanceEx(project).attachVirtualMachine(environment)
+        } catch (e: ExecutionException) {
+            log.error("Failed to attach debugger session", e)
+            throw DapErrors.attachError(e.message ?: "Attach failed")
+        }
+
+        if (session == null) {
+            return false
+        }
+
+        debuggerSession = session
+        debugProcess = session.process
+        debugProcess?.addDebugProcessListener(debugProcessListener)
+        isAttached = true
+
         return true
     }
     
     override suspend fun disconnect(terminateDebuggee: Boolean) {
         log.info("Disconnecting from debug session: terminateDebuggee=$terminateDebuggee")
         
-        // TODO: Implement actual disconnect
-        // This would involve:
-        // 1. Stopping the debugger session
-        // 2. Optionally terminating the debuggee process
-        
+        val process = debugProcess
+        if (process != null) {
+            if (terminateDebuggee) {
+                process.stop(true)
+            } else {
+                process.stop(false)
+            }
+        }
+
         cleanup()
-        
-        eventListener?.onTerminated(false)
     }
     
     override suspend fun terminate() {
         log.info("Terminating debug session")
         
-        // TODO: Implement actual terminate
-        // This would involve:
-        // 1. Stopping the debugger session
-        // 2. Terminating the debuggee process
-        
+        val process = debugProcess
+        if (process != null) {
+            process.stop(true)
+        }
+
         cleanup()
-        
-        eventListener?.onTerminated(false)
     }
     
     private fun cleanup() {
         isLaunched = false
         isAttached = false
+        lastSuspendContext = null
+        pendingStopReason = null
         breakpoints.clear()
         frames.clear()
         variableRefs.clear()
+        threadIdByUniqueId.clear()
+        threadUniqueIdById.clear()
+        debugProcess?.removeDebugProcessListener(debugProcessListener)
+        debugProcess = null
+        debuggerSession = null
+    }
+
+    private fun getOrCreateThreadId(thread: ThreadReference): Int {
+        val uniqueId = thread.uniqueID()
+        return threadIdByUniqueId.computeIfAbsent(uniqueId) { _ ->
+            val id = threadIdGenerator.incrementAndGet()
+            threadUniqueIdById[id] = uniqueId
+            id
+        }
+    }
+
+    private fun getOrCreateThreadId(thread: ThreadReferenceProxy): Int {
+        return getOrCreateThreadId(thread.threadReference)
+    }
+
+    private suspend fun <T> runInManagerThread(block: () -> T): T {
+        val managerThread = debugProcess?.managerThread
+            ?: throw DapErrors.internalError("Debugger manager thread not available")
+
+        return suspendCancellableCoroutine { cont ->
+            managerThread.invokeCommand(object : DebuggerCommand {
+                override fun action() {
+                    try {
+                        cont.resume(block())
+                    } catch (e: CancellationException) {
+                        cont.resumeWithException(e)
+                    } catch (e: Throwable) {
+                        cont.resumeWithException(e)
+                    }
+                }
+
+                override fun commandCancelled() {
+                    cont.resumeWithException(CancellationException("Debugger command cancelled"))
+                }
+            })
+        }
+    }
+
+    private class DapDebugEnvironment(
+        private val project: Project,
+        private val remoteConnection: RemoteConnection,
+        private val pollTimeout: Long,
+        private val sessionName: String,
+        private val autoRestart: Boolean
+    ) : DebugEnvironment {
+        override fun createExecutionResult(): ExecutionResult? {
+            val handler = RemoteDebugProcessHandler(project, autoRestart)
+            return DefaultExecutionResult(null, handler)
+        }
+
+        override fun getSearchScope(): GlobalSearchScope {
+            val scope = ExecutionSearchScopes.executionScope(project, null)
+            return DebuggerGlobalSearchScope(scope, project)
+        }
+
+        override fun isRemote(): Boolean = true
+
+        override fun getRemoteConnection(): RemoteConnection = remoteConnection
+
+        override fun getPollTimeout(): Long = pollTimeout
+
+        override fun getSessionName(): String = sessionName
     }
     
     // ========================================================================
