@@ -18,8 +18,8 @@ import com.frenchef.intellijlsp.dap.handlers.SetBreakpointsHandler
 import com.frenchef.intellijlsp.dap.handlers.StackTraceHandler
 import com.frenchef.intellijlsp.dap.handlers.StepInHandler
 import com.frenchef.intellijlsp.dap.handlers.StepOutHandler
-import com.frenchef.intellijlsp.dap.handlers.ThreadsHandler
 import com.frenchef.intellijlsp.dap.handlers.TerminateHandler
+import com.frenchef.intellijlsp.dap.handlers.ThreadsHandler
 import com.frenchef.intellijlsp.dap.handlers.VariablesHandler
 import com.frenchef.intellijlsp.dap.model.DapCommands
 import com.frenchef.intellijlsp.dap.model.DapEvent
