@@ -30,10 +30,10 @@ class DapRequestRouter(private val session: DapSession) {
     }
     
     /**
-     * Handle an incoming DAP message.
-     * 
-     * @param json The raw JSON message
-     * @return A response message, or null for events/notifications
+     * Route a raw DAP JSON message to the appropriate handler based on its `"type"` field.
+     *
+     * @param json The DAP message as a JsonObject; expected to contain a `"type"` property (e.g., "request", "response", "event").
+     * @return A DapResponse for handled requests, or `null` for responses, events, unknown types, or when no response should be sent.
      */
     suspend fun handleMessage(json: JsonObject): DapResponse? {
         val type = json.get("type")?.asString
@@ -58,7 +58,14 @@ class DapRequestRouter(private val session: DapSession) {
     }
     
     /**
-     * Handle a DAP request and return a response.
+     * Routes a single DAP request JSON to the registered handler after validating session state.
+     *
+     * Validates the session state for the request's command and, if valid, invokes the registered handler
+     * with the request arguments. Produces a success response containing the handler result, or an error
+     * response describing validation failures, unknown commands, DAP-level errors, or internal errors.
+     *
+     * @param json The raw DAP request JSON object containing at minimum `seq`, `command`, and optional `arguments`.
+     * @return A DapResponse representing either the handler's successful response body or an error response with a DAP error id.
      */
     private suspend fun handleRequest(json: JsonObject): DapResponse {
         val seq = json.get("seq")?.asInt ?: 0
@@ -114,9 +121,17 @@ class DapRequestRouter(private val session: DapSession) {
     }
     
     /**
-     * Validate session state for the given command.
-     * 
-     * @return Pair of (error message, error id) if validation fails, null if OK
+     * Check whether the session's current state permits executing the given DAP command.
+     *
+     * Special cases:
+     * - `initialize` is only permitted when the session is UNINITIALIZED.
+     * - All other commands require the session to be initialized (not UNINITIALIZED or INITIALIZING).
+     * - Commands are rejected when the session is TERMINATED.
+     * - Certain commands (stackTrace, scopes, variables, evaluate, setExpression, source, exceptionInfo)
+     *   require the session to be in the STOPPED state.
+     *
+     * @param command The DAP request command name to validate.
+     * @return A `Pair<String, Int>` with a human-readable error message and DAP error id if validation fails, or `null` if the command is allowed.
      */
     private fun validateState(command: String): Pair<String, Int>? {
         val state = session.getState()
@@ -204,5 +219,12 @@ fun interface DapRequestHandler {
      * @return The response body as JsonElement
      * @throws DapException if there's a protocol error
      */
-    suspend fun handle(arguments: JsonElement?): JsonElement?
+    /**
+ * Handles a DAP request and produces the response body for that request.
+ *
+ * @param arguments The request arguments as JSON, or `null` if the request has no arguments.
+ * @return A `JsonElement` to use as the response body, or `null` if no body should be returned.
+ * @throws DapException To signal protocol-level errors or terminal failures.
+ */
+suspend fun handle(arguments: JsonElement?): JsonElement?
 }

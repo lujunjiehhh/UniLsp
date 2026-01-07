@@ -91,6 +91,14 @@ class DapServer(
         shutdownOnce()
     }
 
+    /**
+     * Continuously reads and processes DAP JSON messages until the server stops.
+     *
+     * Reads messages from the framed input and forwards each parsed JSON object to
+     * processMessage. The loop ends when no message is available (end of stream),
+     * when the coroutine is cancelled, or when the server is no longer running.
+     * Transport read errors are logged.
+     */
     private suspend fun messageLoop() {
         while (running.get()) {
             try {
@@ -107,6 +115,15 @@ class DapServer(
         }
     }
 
+    /**
+     * Processes a single incoming DAP JSON message, sending any generated response and related events.
+     *
+     * If processing yields a response, the response is sent to the client. If the response is for the
+     * INITIALIZE command and indicates success, an `initialized` event is also sent. Any exceptions
+     * raised during processing are logged as internal errors and swallowed.
+     *
+     * @param json The parsed DAP message as a `JsonObject`.
+     */
     private suspend fun processMessage(json: JsonObject) {
         try {
             val response = router.handleMessage(json)
@@ -121,14 +138,32 @@ class DapServer(
         }
     }
 
+    /**
+     * Sends the given DAP response message to the client.
+     *
+     * @param response The response to send.
+     */
     private fun sendResponse(response: DapResponse) {
         sendMessage(response, "response")
     }
 
+    /**
+     * Sends a DAP event to the connected client.
+     *
+     * @param event The event to send.
+     */
     private fun sendEvent(event: DapEvent) {
         sendMessage(event, "event")
     }
 
+    /**
+     * Serializes a DAP message to JSON and writes it to the outbound framed message stream.
+     *
+     * If sending fails, the transport error is logged and the exception is suppressed.
+     *
+     * @param message The DAP message object to send (for example a response or event model).
+     * @param label Short label used in error messages to identify the message type (e.g., "response", "event").
+     */
     private fun sendMessage(message: Any, label: String) {
         try {
             val json = gson.toJsonTree(message).asJsonObject
@@ -138,6 +173,13 @@ class DapServer(
         }
     }
 
+    /**
+     * Sends the protocol `initialized` event to the client and advances the server session state.
+     *
+     * Constructs an `INITIALIZED` DAP event with a new sequence number, sends it, and then updates
+     * the internal session to reflect that the initialized event was dispatched. If the session
+     * fails to transition after sending the event, an internal error is logged.
+     */
     private fun sendInitializedEvent() {
         val event = DapEvent(
             seq = session.nextSeq(),
@@ -150,6 +192,15 @@ class DapServer(
         }
     }
 
+    /**
+     * Registers DAP command handlers on the request router.
+     *
+     * Maps:
+     * - `DapCommands.INITIALIZE` to `InitializeHandler(session)`
+     * - `DapCommands.CONFIGURATION_DONE` to `ConfigurationDoneHandler(session)`
+     * - `DapCommands.LAUNCH` to `LaunchHandler(backend)`
+     * - `DapCommands.ATTACH` to `AttachHandler(backend)`
+     */
     private fun registerHandlers() {
         router.registerHandler(DapCommands.INITIALIZE, InitializeHandler(session))
         router.registerHandler(DapCommands.CONFIGURATION_DONE, ConfigurationDoneHandler(session))
@@ -157,6 +208,11 @@ class DapServer(
         router.registerHandler(DapCommands.ATTACH, AttachHandler(backend))
     }
 
+    /**
+     * Initiates the server shutdown exactly once.
+     *
+     * Marks the shutdown as started and, if this is the first invocation, calls shutdownInternal().
+     */
     private fun shutdownOnce() {
         if (!shutdownStarted.compareAndSet(false, true)) {
             return

@@ -10,6 +10,13 @@ import com.google.gson.JsonElement
 class ConfigurationDoneHandler(
     private val session: DapSession
 ) : DapRequestHandler {
+    /**
+     * Finalizes configuration for the current DAP session in response to a `configurationDone` request.
+     *
+     * @param arguments Optional request arguments; this handler ignores any provided payload.
+     * @throws Throwable when configuration cannot be completed — an internal DAP error is raised with the current session state.
+     * @return `null` on success.
+     */
     override suspend fun handle(arguments: JsonElement?): JsonElement? {
         if (!session.onConfigurationDone()) {
             throw DapErrors.internalError(
