@@ -375,7 +375,7 @@ class DapServer(
         }
     }
 
-    private fun recordTelemetry(block: () -> Unit) {
+    private inline fun recordTelemetry(block: () -> Unit) {
         try {
             block()
         } catch (e: Exception) {
