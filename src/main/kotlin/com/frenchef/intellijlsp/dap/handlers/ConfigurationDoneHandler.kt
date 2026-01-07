@@ -6,6 +6,10 @@ import com.google.gson.JsonElement
 
 /**
  * Handler for the DAP "configurationDone" request.
+ *
+ * This request is valid after the client finishes setting breakpoints and other
+ * configuration, and before launch/attach moves the session into running state.
+ * It advances the session from CONFIGURING to RUNNING.
  */
 class ConfigurationDoneHandler(
     private val session: DapSession

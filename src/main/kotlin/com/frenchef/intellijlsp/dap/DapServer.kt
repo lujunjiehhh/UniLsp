@@ -121,24 +121,26 @@ class DapServer(
         }
     }
 
-    private fun sendResponse(response: DapResponse) {
+    private suspend fun sendResponse(response: DapResponse) {
         sendMessage(response, "response")
     }
 
-    private fun sendEvent(event: DapEvent) {
+    private suspend fun sendEvent(event: DapEvent) {
         sendMessage(event, "event")
     }
 
-    private fun sendMessage(message: Any, label: String) {
+    private suspend fun sendMessage(message: Any, label: String) {
         try {
             val json = gson.toJsonTree(message).asJsonObject
-            messageWriter.writeMessage(json)
+            withContext(Dispatchers.IO) {
+                messageWriter.writeMessage(json)
+            }
         } catch (e: Exception) {
             DapErrors.logTransportError("Failed to send DAP $label", e)
         }
     }
 
-    private fun sendInitializedEvent() {
+    private suspend fun sendInitializedEvent() {
         val event = DapEvent(
             seq = session.nextSeq(),
             event = DapEvents.INITIALIZED,

@@ -141,8 +141,13 @@ class DapRequestRouter(private val session: DapSession) {
         
         // Commands that require stopped state
         val stoppedOnlyCommands = setOf(
-            "stackTrace", "scopes", "variables", "evaluate",
-            "setExpression", "source", "exceptionInfo"
+            DapCommands.STACK_TRACE,
+            DapCommands.SCOPES,
+            DapCommands.VARIABLES,
+            DapCommands.EVALUATE,
+            DapCommands.SET_EXPRESSION,
+            DapCommands.SOURCE,
+            DapCommands.EXCEPTION_INFO
         )
         
         if (command in stoppedOnlyCommands && state != DapSession.State.STOPPED) {
