@@ -2,8 +2,10 @@ package com.frenchef.intellijlsp.dap
 
 import com.frenchef.intellijlsp.dap.backend.DebuggerBackend
 import com.frenchef.intellijlsp.dap.backend.IntellijDebuggerBackend
+import com.frenchef.intellijlsp.dap.handlers.AttachHandler
 import com.frenchef.intellijlsp.dap.handlers.DapRequestRouter
 import com.frenchef.intellijlsp.dap.handlers.InitializeHandler
+import com.frenchef.intellijlsp.dap.handlers.LaunchHandler
 import com.frenchef.intellijlsp.dap.model.DapEvent
 import com.frenchef.intellijlsp.dap.model.DapResponse
 import com.frenchef.intellijlsp.dap.model.InitializedEventBody
@@ -149,6 +151,8 @@ class DapServer(
 
     private fun registerHandlers() {
         router.registerHandler("initialize", InitializeHandler(session))
+        router.registerHandler("launch", LaunchHandler(backend))
+        router.registerHandler("attach", AttachHandler(backend))
     }
 
     private fun shutdownOnce() {
