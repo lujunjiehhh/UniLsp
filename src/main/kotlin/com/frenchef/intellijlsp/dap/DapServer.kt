@@ -3,6 +3,7 @@ package com.frenchef.intellijlsp.dap
 import com.frenchef.intellijlsp.dap.backend.DebuggerBackend
 import com.frenchef.intellijlsp.dap.backend.IntellijDebuggerBackend
 import com.frenchef.intellijlsp.dap.handlers.DapRequestRouter
+import com.frenchef.intellijlsp.dap.handlers.InitializeHandler
 import com.frenchef.intellijlsp.dap.model.DapResponse
 import com.frenchef.intellijlsp.protocol.MessageReader
 import com.frenchef.intellijlsp.protocol.MessageWriter
@@ -45,6 +46,10 @@ class DapServer(
     private val running = AtomicBoolean(false)
     private val shutdownStarted = AtomicBoolean(false)
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    init {
+        registerHandlers()
+    }
 
     /**
      * Start the DAP server loop.
@@ -112,6 +117,10 @@ class DapServer(
         } catch (e: Exception) {
             DapErrors.logTransportError("Failed to send DAP response", e)
         }
+    }
+
+    private fun registerHandlers() {
+        router.registerHandler("initialize", InitializeHandler(session))
     }
 
     private fun shutdownOnce() {
