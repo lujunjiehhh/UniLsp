@@ -4,7 +4,9 @@ import com.frenchef.intellijlsp.dap.backend.DebuggerBackend
 import com.frenchef.intellijlsp.dap.backend.IntellijDebuggerBackend
 import com.frenchef.intellijlsp.dap.handlers.DapRequestRouter
 import com.frenchef.intellijlsp.dap.handlers.InitializeHandler
+import com.frenchef.intellijlsp.dap.model.DapEvent
 import com.frenchef.intellijlsp.dap.model.DapResponse
+import com.frenchef.intellijlsp.dap.model.InitializedEventBody
 import com.frenchef.intellijlsp.protocol.MessageReader
 import com.frenchef.intellijlsp.protocol.MessageWriter
 import com.google.gson.JsonObject
@@ -104,6 +106,9 @@ class DapServer(
             val response = router.handleMessage(json)
             if (response != null) {
                 sendResponse(response)
+                if (response.command == "initialize" && response.success) {
+                    sendInitializedEvent()
+                }
             }
         } catch (e: Exception) {
             DapErrors.logInternalError("Error processing DAP message", e)
@@ -117,6 +122,24 @@ class DapServer(
         } catch (e: Exception) {
             DapErrors.logTransportError("Failed to send DAP response", e)
         }
+    }
+
+    private fun sendEvent(event: DapEvent) {
+        try {
+            val json = gson.toJsonTree(event).asJsonObject
+            messageWriter.writeMessage(json)
+        } catch (e: Exception) {
+            DapErrors.logTransportError("Failed to send DAP event", e)
+        }
+    }
+
+    private fun sendInitializedEvent() {
+        val event = DapEvent(
+            seq = session.nextSeq(),
+            event = "initialized",
+            body = gson.toJsonTree(InitializedEventBody())
+        )
+        sendEvent(event)
     }
 
     private fun registerHandlers() {
