@@ -14,23 +14,31 @@ class InitializeHandler(private val session: DapSession) : DapRequestHandler {
     private val gson = DapGson.instance
 
     override fun handle(arguments: JsonElement?): JsonElement? {
-        if (arguments == null || arguments.isJsonNull) {
-            throw DapErrors.invalidArguments("initialize requires arguments")
-        }
-
-        val args = gson.fromJson(arguments, InitializeRequestArguments::class.java)
-
+        val args = parseArguments(arguments)
         if (!session.onInitializeRequest(args)) {
             throw DapErrors.alreadyInitialized()
         }
 
-        val capabilities = Capabilities(
+        val capabilities = buildServerCapabilities()
+        if (!session.onInitializeComplete(capabilities)) {
+            throw DapErrors.internalError("Initialize state transition failed")
+        }
+
+        return gson.toJsonTree(capabilities)
+    }
+
+    private fun parseArguments(arguments: JsonElement?): InitializeRequestArguments {
+        if (arguments == null || arguments.isJsonNull) {
+            throw DapErrors.invalidArguments("initialize requires arguments")
+        }
+
+        return gson.fromJson(arguments, InitializeRequestArguments::class.java)
+    }
+
+    private fun buildServerCapabilities(): Capabilities {
+        return Capabilities(
             supportsConfigurationDoneRequest = true,
             supportsTerminateRequest = true
         )
-
-        session.onInitializeComplete(capabilities)
-
-        return gson.toJsonTree(capabilities)
     }
 }
