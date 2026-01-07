@@ -1,17 +1,31 @@
 package com.frenchef.intellijlsp.dap
 
 import com.frenchef.intellijlsp.dap.backend.DebuggerBackend
+import com.frenchef.intellijlsp.dap.backend.DebuggerEventListener
 import com.frenchef.intellijlsp.dap.backend.IntellijDebuggerBackend
 import com.frenchef.intellijlsp.dap.handlers.AttachHandler
+import com.frenchef.intellijlsp.dap.handlers.ContinueHandler
 import com.frenchef.intellijlsp.dap.handlers.ConfigurationDoneHandler
 import com.frenchef.intellijlsp.dap.handlers.DapRequestRouter
 import com.frenchef.intellijlsp.dap.handlers.InitializeHandler
 import com.frenchef.intellijlsp.dap.handlers.LaunchHandler
+import com.frenchef.intellijlsp.dap.handlers.NextHandler
+import com.frenchef.intellijlsp.dap.handlers.PauseHandler
+import com.frenchef.intellijlsp.dap.handlers.SetBreakpointsHandler
+import com.frenchef.intellijlsp.dap.handlers.StackTraceHandler
+import com.frenchef.intellijlsp.dap.handlers.StepInHandler
+import com.frenchef.intellijlsp.dap.handlers.StepOutHandler
+import com.frenchef.intellijlsp.dap.handlers.ThreadsHandler
 import com.frenchef.intellijlsp.dap.model.DapCommands
 import com.frenchef.intellijlsp.dap.model.DapEvent
 import com.frenchef.intellijlsp.dap.model.DapEvents
 import com.frenchef.intellijlsp.dap.model.DapResponse
+import com.frenchef.intellijlsp.dap.model.ContinuedEventBody
+import com.frenchef.intellijlsp.dap.model.DapErrorId
+import com.frenchef.intellijlsp.dap.model.DapException
 import com.frenchef.intellijlsp.dap.model.InitializedEventBody
+import com.frenchef.intellijlsp.dap.model.StoppedEventBody
+import com.frenchef.intellijlsp.dap.model.ThreadEventBody
 import com.frenchef.intellijlsp.protocol.MessageReader
 import com.frenchef.intellijlsp.protocol.MessageWriter
 import com.google.gson.JsonObject
@@ -55,8 +69,128 @@ class DapServer(
     private val shutdownStarted = AtomicBoolean(false)
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    private val debuggerEventListener = object : DebuggerEventListener {
+        override fun onStopped(
+            reason: com.frenchef.intellijlsp.dap.model.StoppedReason,
+            threadId: Int?,
+            description: String?,
+            allThreadsStopped: Boolean?,
+            hitBreakpointIds: List<Int>?
+        ) {
+            if (!running.get()) {
+                return
+            }
+
+            if (threadId != null) {
+                if (!session.onStopped(threadId)) {
+                    DapErrors.logInternalError(
+                        "Failed to transition session to STOPPED for thread $threadId"
+                    )
+                }
+            } else {
+                log.warn("Stopped event received without thread id")
+            }
+
+            val body = StoppedEventBody(
+                reason = reason,
+                description = description,
+                threadId = threadId,
+                allThreadsStopped = allThreadsStopped,
+                hitBreakpointIds = hitBreakpointIds
+            )
+            scope.launch {
+                sendEvent(
+                    DapEvent(
+                        seq = session.nextSeq(),
+                        event = DapEvents.STOPPED,
+                        body = gson.toJsonTree(body)
+                    )
+                )
+            }
+        }
+
+        override fun onContinued(threadId: Int, allThreadsContinued: Boolean?) {
+            if (!running.get()) {
+                return
+            }
+
+            if (session.isStopped()) {
+                if (!session.onContinued()) {
+                    DapErrors.logInternalError(
+                        "Failed to transition session to RUNNING for thread $threadId"
+                    )
+                }
+            } else {
+                log.warn("Continued event received while session state is ${session.getState()}")
+            }
+
+            val body = ContinuedEventBody(
+                threadId = threadId,
+                allThreadsContinued = allThreadsContinued
+            )
+            scope.launch {
+                sendEvent(
+                    DapEvent(
+                        seq = session.nextSeq(),
+                        event = DapEvents.CONTINUED,
+                        body = gson.toJsonTree(body)
+                    )
+                )
+            }
+        }
+
+        override fun onThread(
+            reason: com.frenchef.intellijlsp.dap.model.ThreadEventReason,
+            threadId: Int
+        ) {
+            if (!running.get()) {
+                return
+            }
+
+            val body = ThreadEventBody(
+                reason = reason,
+                threadId = threadId
+            )
+            scope.launch {
+                sendEvent(
+                    DapEvent(
+                        seq = session.nextSeq(),
+                        event = DapEvents.THREAD,
+                        body = gson.toJsonTree(body)
+                    )
+                )
+            }
+        }
+
+        override fun onOutput(
+            category: com.frenchef.intellijlsp.dap.model.OutputCategory?,
+            output: String,
+            source: com.frenchef.intellijlsp.dap.model.Source?,
+            line: Int?,
+            column: Int?
+        ) {
+            log.debug("Output event received: category=$category, outputLength=${output.length}")
+        }
+
+        override fun onExited(exitCode: Int) {
+            log.debug("Exited event received: exitCode=$exitCode")
+        }
+
+        override fun onTerminated(restart: Boolean?) {
+            log.debug("Terminated event received: restart=$restart")
+        }
+
+        override fun onBreakpoint(
+            reason: com.frenchef.intellijlsp.dap.model.BreakpointEventReason,
+            breakpoint: com.frenchef.intellijlsp.dap.model.Breakpoint
+        ) {
+            log.debug("Breakpoint event received: reason=$reason")
+        }
+    }
+
     init {
         registerHandlers()
+        backend.setEventListener(debuggerEventListener)
     }
 
     /**
@@ -116,6 +250,11 @@ class DapServer(
                     sendInitializedEvent()
                 }
             }
+        } catch (e: DapException) {
+            DapErrors.logInternalError("Error processing DAP message", e)
+            if (e.errorId == DapErrorId.INTERNAL_ERROR) {
+                running.set(false)
+            }
         } catch (e: Exception) {
             DapErrors.logInternalError("Error processing DAP message", e)
         }
@@ -148,7 +287,9 @@ class DapServer(
         )
         sendEvent(event)
         if (!session.onInitializedEventSent()) {
-            DapErrors.logInternalError("Failed to transition session state after sending initialized event")
+            throw DapErrors.internalError(
+                "Failed to transition session state after sending initialized event"
+            )
         }
     }
 
@@ -157,6 +298,14 @@ class DapServer(
         router.registerHandler(DapCommands.CONFIGURATION_DONE, ConfigurationDoneHandler(session))
         router.registerHandler(DapCommands.LAUNCH, LaunchHandler(backend))
         router.registerHandler(DapCommands.ATTACH, AttachHandler(backend))
+        router.registerHandler(DapCommands.SET_BREAKPOINTS, SetBreakpointsHandler(backend))
+        router.registerHandler(DapCommands.THREADS, ThreadsHandler(backend))
+        router.registerHandler(DapCommands.STACK_TRACE, StackTraceHandler(backend))
+        router.registerHandler(DapCommands.CONTINUE, ContinueHandler(backend))
+        router.registerHandler(DapCommands.NEXT, NextHandler(backend))
+        router.registerHandler(DapCommands.STEP_IN, StepInHandler(backend))
+        router.registerHandler(DapCommands.STEP_OUT, StepOutHandler(backend))
+        router.registerHandler(DapCommands.PAUSE, PauseHandler(backend))
     }
 
     private fun shutdownOnce() {
@@ -178,6 +327,7 @@ class DapServer(
         } catch (e: Exception) {
             DapErrors.logInternalError("Error during DAP shutdown", e)
         } finally {
+            backend.setEventListener(null)
             if (closeStreamsOnShutdown) {
                 try {
                     input.close()
