@@ -8,6 +8,8 @@ object DapCommands {
     const val CONFIGURATION_DONE = "configurationDone"
     const val LAUNCH = "launch"
     const val ATTACH = "attach"
+    const val DISCONNECT = "disconnect"
+    const val TERMINATE = "terminate"
     const val STACK_TRACE = "stackTrace"
     const val SCOPES = "scopes"
     const val VARIABLES = "variables"
