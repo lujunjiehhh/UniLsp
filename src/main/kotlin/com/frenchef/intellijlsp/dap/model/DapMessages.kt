@@ -25,6 +25,28 @@ sealed class DapMessage {
 }
 
 /**
+ * DAP message kind mapping for the wire "type" field.
+ *
+ * Mapping rules:
+ * - "request"  -> [DapRequest]
+ * - "response" -> [DapResponse]
+ * - "event"    -> [DapEvent]
+ */
+enum class DapMessageKind(val wireType: String) {
+    REQUEST("request"),
+    RESPONSE("response"),
+    EVENT("event");
+
+    companion object {
+        private val byWireType = values().associateBy { it.wireType }
+
+        fun fromWireType(type: String): DapMessageKind? {
+            return byWireType[type]
+        }
+    }
+}
+
+/**
  * A client or debug adapter initiated request.
  */
 data class DapRequest(
