@@ -62,7 +62,8 @@ class DapServer(
     private val input: InputStream,
     private val output: OutputStream,
     private val onExit: (() -> Unit)? = null,
-    private val closeStreamsOnShutdown: Boolean = true
+    private val closeStreamsOnShutdown: Boolean = true,
+    private val telemetry: DapTelemetry = NoopDapTelemetry
 ) {
     private val log = logger<DapServer>()
     private val session = DapSession()
@@ -314,6 +315,15 @@ class DapServer(
 
     private suspend fun processMessage(json: JsonObject) {
         try {
+            val type = json.get("type")?.asString
+            if (type == "request") {
+                val command = json.get("command")?.asString ?: "unknown"
+                val seq = json.get("seq")?.asInt ?: 0
+                recordTelemetry {
+                    telemetry.onRequest(command, seq)
+                }
+            }
+
             val response = router.handleMessage(json)
             if (response != null) {
                 sendResponse(response)
@@ -322,20 +332,32 @@ class DapServer(
                 }
             }
         } catch (e: DapException) {
+            recordTelemetry {
+                telemetry.onError(DapErrors.categorize(e), "Error processing DAP message", e)
+            }
             DapErrors.logInternalError("Error processing DAP message", e)
             if (e.errorId == DapErrorId.INTERNAL_ERROR) {
                 running.set(false)
             }
         } catch (e: Exception) {
+            recordTelemetry {
+                telemetry.onError(DapErrors.ErrorCategory.INTERNAL, "Error processing DAP message", e)
+            }
             DapErrors.logInternalError("Error processing DAP message", e)
         }
     }
 
     private suspend fun sendResponse(response: DapResponse) {
+        recordTelemetry {
+            telemetry.onResponse(response.command, response.success, response.seq, response.requestSeq)
+        }
         sendMessage(response, "response")
     }
 
     private suspend fun sendEvent(event: DapEvent) {
+        recordTelemetry {
+            telemetry.onEvent(event.event, event.seq)
+        }
         sendMessage(event, "event")
     }
 
@@ -346,7 +368,18 @@ class DapServer(
                 messageWriter.writeMessage(json)
             }
         } catch (e: Exception) {
+            recordTelemetry {
+                telemetry.onError(DapErrors.ErrorCategory.TRANSPORT, "Failed to send DAP $label", e)
+            }
             DapErrors.logTransportError("Failed to send DAP $label", e)
+        }
+    }
+
+    private fun recordTelemetry(block: () -> Unit) {
+        try {
+            block()
+        } catch (e: Exception) {
+            log.warn("DAP telemetry hook failed", e)
         }
     }
 
