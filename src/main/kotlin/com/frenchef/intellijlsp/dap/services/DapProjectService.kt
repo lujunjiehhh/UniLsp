@@ -52,7 +52,9 @@ class DapProjectService(private val project: Project) : Disposable {
         val socketDir = File(System.getProperty("user.home"), ".intellij-lsp")
         socketDir.mkdirs()
 
-        val projectHash = project.basePath?.hashCode()?.toString(16) ?: "unknown"
+        val projectHash = project.basePath?.hashCode()?.toString(16)
+            ?: project.locationHash.takeIf { it.isNotBlank() }
+            ?: System.identityHashCode(project).toString(16)
         return File(socketDir, "dap-project-$projectHash.sock").absolutePath
     }
 }

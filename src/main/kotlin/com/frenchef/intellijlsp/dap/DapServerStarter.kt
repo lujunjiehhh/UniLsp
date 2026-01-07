@@ -4,6 +4,7 @@ import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -24,7 +25,7 @@ class DapServerStarter(private val project: Project) {
     private val log = logger<DapServerStarter>()
 
     private val tcpServerSocket = AtomicReference<ServerSocket?>()
-    private val acceptScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var acceptScope: CoroutineScope? = null
     private val tcpClients = ConcurrentHashMap<Int, ClientConnection>()
     private val clientIdCounter = AtomicInteger(0)
 
@@ -43,7 +44,7 @@ class DapServerStarter(private val project: Project) {
         return try {
             val socket = ServerSocket(port, 50, InetAddress.getLoopbackAddress())
             tcpServerSocket.set(socket)
-            acceptScope.launch { acceptConnections(socket) }
+            ensureAcceptScope().launch { acceptConnections(socket) }
             true
         } catch (e: Exception) {
             DapErrors.logTransportError("Failed to start DAP TCP server", e)
@@ -109,7 +110,8 @@ class DapServerStarter(private val project: Project) {
         stdioServer?.stop()
         stdioServer = null
 
-        acceptScope.cancel()
+        acceptScope?.cancel()
+        acceptScope = null
     }
 
     fun isRunning(): Boolean {
@@ -127,6 +129,18 @@ class DapServerStarter(private val project: Project) {
         return tcpClients.size + udsCount
     }
 
+    private fun ensureAcceptScope(): CoroutineScope {
+        val current = acceptScope
+        val active = current?.coroutineContext?.get(Job)?.isActive == true
+        if (active && current != null) {
+            return current
+        }
+
+        val newScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        acceptScope = newScope
+        return newScope
+    }
+
     private suspend fun acceptConnections(socket: ServerSocket) {
         while (!socket.isClosed) {
             try {
@@ -134,10 +148,19 @@ class DapServerStarter(private val project: Project) {
                     socket.accept()
                 }
 
-                val clientId = clientIdCounter.incrementAndGet()
-                val client = ClientConnection(clientId, clientSocket)
-                tcpClients[clientId] = client
-                client.start()
+                try {
+                    val clientId = clientIdCounter.incrementAndGet()
+                    val client = ClientConnection(clientId, clientSocket)
+                    tcpClients[clientId] = client
+                    client.start()
+                } catch (e: Exception) {
+                    try {
+                        clientSocket.close()
+                    } catch (closeError: Exception) {
+                        log.warn("Error closing DAP client socket after failure", closeError)
+                    }
+                    throw e
+                }
             } catch (e: Exception) {
                 if (!socket.isClosed) {
                     DapErrors.logTransportError("Error accepting DAP TCP connection", e)

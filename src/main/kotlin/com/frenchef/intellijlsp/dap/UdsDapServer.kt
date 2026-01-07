@@ -44,14 +44,39 @@ class UdsDapServer(
 
         return try {
             val socketFile = File(socketPath)
-            socketFile.parentFile?.mkdirs()
+            val socketDir = socketFile.parentFile
+            socketDir?.mkdirs()
+
+            // Restrict parent directory permissions where supported.
+            if (socketDir != null) {
+                try {
+                    val dirPermissions = setOf(
+                        PosixFilePermission.OWNER_READ,
+                        PosixFilePermission.OWNER_WRITE,
+                        PosixFilePermission.OWNER_EXECUTE
+                    )
+                    Files.setPosixFilePermissions(socketDir.toPath(), dirPermissions)
+                } catch (e: Exception) {
+                    log.warn("Could not set DAP socket directory permissions", e)
+                }
+            }
             if (socketFile.exists()) {
                 socketFile.delete()
             }
 
             val address = UnixDomainSocketAddress.of(socketPath)
-            serverChannel = ServerSocketChannel.open(StandardProtocolFamily.UNIX)
-            serverChannel?.bind(address)
+            val channel = ServerSocketChannel.open(StandardProtocolFamily.UNIX)
+            try {
+                channel.bind(address)
+            } catch (e: Exception) {
+                try {
+                    channel.close()
+                } catch (closeError: Exception) {
+                    log.warn("Error closing DAP server channel after bind failure", closeError)
+                }
+                throw e
+            }
+            serverChannel = channel
 
             try {
                 val permissions = setOf(
@@ -112,10 +137,19 @@ class UdsDapServer(
                     channel.accept()
                 }
 
-                val clientId = clientIdCounter.incrementAndGet()
-                val client = ClientConnection(clientId, clientChannel)
-                clients[clientId] = client
-                client.start()
+                try {
+                    val clientId = clientIdCounter.incrementAndGet()
+                    val client = ClientConnection(clientId, clientChannel)
+                    clients[clientId] = client
+                    client.start()
+                } catch (e: Exception) {
+                    try {
+                        clientChannel.close()
+                    } catch (closeError: Exception) {
+                        log.warn("Error closing DAP UDS client channel after failure", closeError)
+                    }
+                    throw e
+                }
             } catch (e: Exception) {
                 if (running) {
                     DapErrors.logTransportError("Error accepting DAP UDS connection", e)

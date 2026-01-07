@@ -43,6 +43,7 @@ class DapServer(
     private val messageWriter = MessageWriter(output)
 
     private val running = AtomicBoolean(false)
+    private val shutdownStarted = AtomicBoolean(false)
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     /**
@@ -60,7 +61,7 @@ class DapServer(
             } catch (e: Exception) {
                 DapErrors.logTransportError("DAP server message loop failed", e)
             } finally {
-                shutdown()
+                shutdownOnce()
             }
         }
     }
@@ -74,7 +75,7 @@ class DapServer(
         }
 
         scope.cancel()
-        shutdown()
+        shutdownOnce()
     }
 
     private suspend fun messageLoop() {
@@ -113,7 +114,15 @@ class DapServer(
         }
     }
 
-    private fun shutdown() {
+    private fun shutdownOnce() {
+        if (!shutdownStarted.compareAndSet(false, true)) {
+            return
+        }
+
+        shutdownInternal()
+    }
+
+    private fun shutdownInternal() {
         try {
             if (!session.isTerminated()) {
                 runBlocking {
