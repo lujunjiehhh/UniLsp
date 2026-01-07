@@ -8,9 +8,16 @@ object DapCommands {
     const val CONFIGURATION_DONE = "configurationDone"
     const val LAUNCH = "launch"
     const val ATTACH = "attach"
+    const val SET_BREAKPOINTS = "setBreakpoints"
+    const val THREADS = "threads"
     const val DISCONNECT = "disconnect"
     const val TERMINATE = "terminate"
     const val STACK_TRACE = "stackTrace"
+    const val CONTINUE = "continue"
+    const val NEXT = "next"
+    const val STEP_IN = "stepIn"
+    const val STEP_OUT = "stepOut"
+    const val PAUSE = "pause"
     const val SCOPES = "scopes"
     const val VARIABLES = "variables"
     const val EVALUATE = "evaluate"
@@ -21,4 +28,11 @@ object DapCommands {
 
 object DapEvents {
     const val INITIALIZED = "initialized"
+    const val STOPPED = "stopped"
+    const val CONTINUED = "continued"
+    const val THREAD = "thread"
+    const val BREAKPOINT = "breakpoint"
+    const val OUTPUT = "output"
+    const val EXITED = "exited"
+    const val TERMINATED = "terminated"
 }

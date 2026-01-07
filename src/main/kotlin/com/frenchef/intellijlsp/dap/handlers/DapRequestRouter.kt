@@ -142,6 +142,10 @@ class DapRequestRouter(private val session: DapSession) {
         // Commands that require stopped state
         val stoppedOnlyCommands = setOf(
             DapCommands.STACK_TRACE,
+            DapCommands.CONTINUE,
+            DapCommands.NEXT,
+            DapCommands.STEP_IN,
+            DapCommands.STEP_OUT,
             DapCommands.SCOPES,
             DapCommands.VARIABLES,
             DapCommands.EVALUATE,
