@@ -16,23 +16,7 @@ object DapGson {
     
     val instance: Gson by lazy {
         GsonBuilder()
-            .registerTypeAdapter(StoppedReason::class.java, StoppedReasonSerializer())
-            .registerTypeAdapter(StoppedReason::class.java, StoppedReasonDeserializer())
-            .registerTypeAdapter(ThreadEventReason::class.java, EnumLowercaseSerializer<ThreadEventReason>())
-            .registerTypeAdapter(OutputCategory::class.java, EnumLowercaseSerializer<OutputCategory>())
-            .registerTypeAdapter(BreakpointEventReason::class.java, EnumLowercaseSerializer<BreakpointEventReason>())
-            .registerTypeAdapter(ModuleEventReason::class.java, EnumLowercaseSerializer<ModuleEventReason>())
-            .registerTypeAdapter(LoadedSourceEventReason::class.java, EnumLowercaseSerializer<LoadedSourceEventReason>())
-            .registerTypeAdapter(ProcessStartMethod::class.java, EnumLowercaseSerializer<ProcessStartMethod>())
-            .registerTypeAdapter(InvalidatedArea::class.java, EnumLowercaseSerializer<InvalidatedArea>())
-            .registerTypeAdapter(SourcePresentationHint::class.java, EnumLowercaseSerializer<SourcePresentationHint>())
-            .registerTypeAdapter(StackFramePresentationHint::class.java, EnumLowercaseSerializer<StackFramePresentationHint>())
-            .registerTypeAdapter(BreakpointReason::class.java, EnumLowercaseSerializer<BreakpointReason>())
-            .registerTypeAdapter(ExceptionBreakMode::class.java, EnumLowercaseSerializer<ExceptionBreakMode>())
-            .registerTypeAdapter(SteppingGranularity::class.java, EnumLowercaseSerializer<SteppingGranularity>())
-            .registerTypeAdapter(EvaluateContext::class.java, EnumLowercaseSerializer<EvaluateContext>())
-            .registerTypeAdapter(PathFormat::class.java, EnumLowercaseSerializer<PathFormat>())
-            .registerTypeAdapter(VariablesFilter::class.java, EnumLowercaseSerializer<VariablesFilter>())
+            .registerTypeAdapter(StoppedReason::class.java, StoppedReasonAdapter())
             .registerTypeAdapter(ChecksumAlgorithm::class.java, ChecksumAlgorithmSerializer())
             .registerTypeAdapter(OutputGroup::class.java, OutputGroupSerializer())
             .serializeNulls()
@@ -40,9 +24,9 @@ object DapGson {
     }
     
     /**
-     * Custom serializer for StoppedReason enum to handle space-separated values.
+     * Custom adapter for StoppedReason enum to handle space-separated values.
      */
-    private class StoppedReasonSerializer : JsonSerializer<StoppedReason> {
+    private class StoppedReasonAdapter : JsonSerializer<StoppedReason>, JsonDeserializer<StoppedReason> {
         override fun serialize(src: StoppedReason?, typeOfSrc: Type?, context: JsonSerializationContext?): JsonElement {
             return when (src) {
                 StoppedReason.STEP -> JsonPrimitive("step")
@@ -57,9 +41,7 @@ object DapGson {
                 null -> JsonNull.INSTANCE
             }
         }
-    }
-    
-    private class StoppedReasonDeserializer : JsonDeserializer<StoppedReason> {
+
         override fun deserialize(json: JsonElement?, typeOfT: Type?, context: JsonDeserializationContext?): StoppedReason? {
             val value = json?.asString ?: return null
             return when (value) {
@@ -74,22 +56,6 @@ object DapGson {
                 "instruction breakpoint" -> StoppedReason.INSTRUCTION_BREAKPOINT
                 else -> null
             }
-        }
-    }
-    
-    /**
-     * Generic lowercase enum serializer.
-     */
-    private class EnumLowercaseSerializer<T : Enum<T>> : JsonSerializer<T>, JsonDeserializer<T> {
-        override fun serialize(src: T?, typeOfSrc: Type?, context: JsonSerializationContext?): JsonElement {
-            return if (src != null) JsonPrimitive(src.name.lowercase()) else JsonNull.INSTANCE
-        }
-        
-        @Suppress("UNCHECKED_CAST")
-        override fun deserialize(json: JsonElement?, typeOfT: Type?, context: JsonDeserializationContext?): T? {
-            val value = json?.asString ?: return null
-            val enumClass = (typeOfT as Class<T>)
-            return enumClass.enumConstants.find { it.name.lowercase() == value.lowercase() }
         }
     }
     

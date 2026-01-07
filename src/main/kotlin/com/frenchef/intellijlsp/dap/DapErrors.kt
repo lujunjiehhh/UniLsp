@@ -1,7 +1,7 @@
 package com.frenchef.intellijlsp.dap
 
-import com.frenchef.intellijlsp.dap.handlers.DapErrorId
-import com.frenchef.intellijlsp.dap.handlers.DapException
+import com.frenchef.intellijlsp.dap.model.DapErrorId
+import com.frenchef.intellijlsp.dap.model.DapException
 import com.intellij.openapi.diagnostic.logger
 
 /**
@@ -13,6 +13,15 @@ import com.intellij.openapi.diagnostic.logger
 object DapErrors {
     
     private val log = logger<DapErrors>()
+
+    private fun logError(category: String, message: String, exception: Throwable? = null) {
+        val fullMessage = "[DAP:$category] $message"
+        if (exception != null) {
+            log.error(fullMessage, exception)
+        } else {
+            log.error(fullMessage)
+        }
+    }
     
     // ========================================================================
     // Error Categories
@@ -47,33 +56,21 @@ object DapErrors {
      * Log a backend error.
      */
     fun logBackendError(message: String, exception: Throwable? = null) {
-        if (exception != null) {
-            log.error("[DAP:BACKEND] $message", exception)
-        } else {
-            log.error("[DAP:BACKEND] $message")
-        }
+        logError("BACKEND", message, exception)
     }
     
     /**
      * Log a transport error.
      */
     fun logTransportError(message: String, exception: Throwable? = null) {
-        if (exception != null) {
-            log.error("[DAP:TRANSPORT] $message", exception)
-        } else {
-            log.error("[DAP:TRANSPORT] $message")
-        }
+        logError("TRANSPORT", message, exception)
     }
     
     /**
      * Log an internal error.
      */
     fun logInternalError(message: String, exception: Throwable? = null) {
-        if (exception != null) {
-            log.error("[DAP:INTERNAL] $message", exception)
-        } else {
-            log.error("[DAP:INTERNAL] $message")
-        }
+        logError("INTERNAL", message, exception)
     }
     
     /**
@@ -198,7 +195,7 @@ object DapErrors {
             is IllegalArgumentException -> invalidArguments(e.message ?: "Unknown")
             is IllegalStateException -> internalError(e.message ?: "Invalid state")
             is UnsupportedOperationException -> DapException(
-                "Operation not supported: ${e.message}",
+                "Operation not supported: ${e.message ?: "unspecified"}",
                 DapErrorId.INTERNAL_ERROR
             )
             else -> internalError(e.message ?: "Unknown error")

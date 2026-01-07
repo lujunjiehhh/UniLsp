@@ -198,16 +198,19 @@ class DapSession {
      * @return true if transition was successful
      */
     fun onStopped(threadId: Int): Boolean {
-        val currentState = state.get()
-        if (currentState != State.RUNNING && currentState != State.STOPPED) {
-            log.warn("Cannot stop: current state is $currentState")
-            return false
+        while (true) {
+            val currentState = state.get()
+            if (currentState != State.RUNNING && currentState != State.STOPPED) {
+                log.warn("Cannot stop: current state is $currentState")
+                return false
+            }
+
+            if (state.compareAndSet(currentState, State.STOPPED)) {
+                stoppedThreadId = threadId
+                log.info("Session transitioning to STOPPED (thread=$threadId)")
+                return true
+            }
         }
-        
-        state.set(State.STOPPED)
-        stoppedThreadId = threadId
-        log.info("Session transitioning to STOPPED (thread=$threadId)")
-        return true
     }
     
     /**
