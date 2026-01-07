@@ -3,6 +3,7 @@ package com.frenchef.intellijlsp.dap
 import com.frenchef.intellijlsp.dap.backend.DebuggerBackend
 import com.frenchef.intellijlsp.dap.backend.IntellijDebuggerBackend
 import com.frenchef.intellijlsp.dap.handlers.AttachHandler
+import com.frenchef.intellijlsp.dap.handlers.ConfigurationDoneHandler
 import com.frenchef.intellijlsp.dap.handlers.DapRequestRouter
 import com.frenchef.intellijlsp.dap.handlers.InitializeHandler
 import com.frenchef.intellijlsp.dap.handlers.LaunchHandler
@@ -151,6 +152,7 @@ class DapServer(
 
     private fun registerHandlers() {
         router.registerHandler("initialize", InitializeHandler(session))
+        router.registerHandler("configurationDone", ConfigurationDoneHandler(session))
         router.registerHandler("launch", LaunchHandler(backend))
         router.registerHandler("attach", AttachHandler(backend))
     }
