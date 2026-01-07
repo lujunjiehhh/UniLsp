@@ -38,8 +38,10 @@ enum class DapMessageKind(val wireType: String) {
     EVENT("event");
 
     companion object {
+        private val byWireType = values().associateBy { it.wireType }
+
         fun fromWireType(type: String): DapMessageKind? {
-            return values().firstOrNull { it.wireType == type }
+            return byWireType[type]
         }
     }
 }
