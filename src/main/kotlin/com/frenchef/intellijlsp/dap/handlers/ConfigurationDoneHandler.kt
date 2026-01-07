@@ -10,9 +10,11 @@ import com.google.gson.JsonElement
 class ConfigurationDoneHandler(
     private val session: DapSession
 ) : DapRequestHandler {
-    override fun handle(arguments: JsonElement?): JsonElement? {
+    override suspend fun handle(arguments: JsonElement?): JsonElement? {
         if (!session.onConfigurationDone()) {
-            throw DapErrors.internalError("ConfigurationDone state transition failed")
+            throw DapErrors.internalError(
+                "configurationDone request not allowed in current session state: ${session.getState()}"
+            )
         }
 
         return null

@@ -35,7 +35,7 @@ class DapRequestRouter(private val session: DapSession) {
      * @param json The raw JSON message
      * @return A response message, or null for events/notifications
      */
-    fun handleMessage(json: JsonObject): DapResponse? {
+    suspend fun handleMessage(json: JsonObject): DapResponse? {
         val type = json.get("type")?.asString
         
         return when (type) {
@@ -60,7 +60,7 @@ class DapRequestRouter(private val session: DapSession) {
     /**
      * Handle a DAP request and return a response.
      */
-    private fun handleRequest(json: JsonObject): DapResponse {
+    private suspend fun handleRequest(json: JsonObject): DapResponse {
         val seq = json.get("seq")?.asInt ?: 0
         val command = json.get("command")?.asString ?: "unknown"
         val arguments = json.get("arguments")
@@ -122,7 +122,7 @@ class DapRequestRouter(private val session: DapSession) {
         val state = session.getState()
         
         // Initialize is always allowed in UNINITIALIZED state
-        if (command == "initialize") {
+        if (command == DapCommands.INITIALIZE) {
             if (state != DapSession.State.UNINITIALIZED) {
                 return "Session already initialized" to DapErrorId.ALREADY_INITIALIZED
             }
@@ -204,5 +204,5 @@ fun interface DapRequestHandler {
      * @return The response body as JsonElement
      * @throws DapException if there's a protocol error
      */
-    fun handle(arguments: JsonElement?): JsonElement?
+    suspend fun handle(arguments: JsonElement?): JsonElement?
 }
