@@ -10,6 +10,8 @@ object DapCommands {
     const val ATTACH = "attach"
     const val SET_BREAKPOINTS = "setBreakpoints"
     const val THREADS = "threads"
+    const val DISCONNECT = "disconnect"
+    const val TERMINATE = "terminate"
     const val STACK_TRACE = "stackTrace"
     const val CONTINUE = "continue"
     const val NEXT = "next"

@@ -7,6 +7,7 @@ import com.frenchef.intellijlsp.dap.handlers.AttachHandler
 import com.frenchef.intellijlsp.dap.handlers.ContinueHandler
 import com.frenchef.intellijlsp.dap.handlers.ConfigurationDoneHandler
 import com.frenchef.intellijlsp.dap.handlers.DapRequestRouter
+import com.frenchef.intellijlsp.dap.handlers.DisconnectHandler
 import com.frenchef.intellijlsp.dap.handlers.InitializeHandler
 import com.frenchef.intellijlsp.dap.handlers.LaunchHandler
 import com.frenchef.intellijlsp.dap.handlers.NextHandler
@@ -16,6 +17,7 @@ import com.frenchef.intellijlsp.dap.handlers.StackTraceHandler
 import com.frenchef.intellijlsp.dap.handlers.StepInHandler
 import com.frenchef.intellijlsp.dap.handlers.StepOutHandler
 import com.frenchef.intellijlsp.dap.handlers.ThreadsHandler
+import com.frenchef.intellijlsp.dap.handlers.TerminateHandler
 import com.frenchef.intellijlsp.dap.model.DapCommands
 import com.frenchef.intellijlsp.dap.model.DapEvent
 import com.frenchef.intellijlsp.dap.model.DapEvents
@@ -372,6 +374,8 @@ class DapServer(
         router.registerHandler(DapCommands.STEP_IN, StepInHandler(backend))
         router.registerHandler(DapCommands.STEP_OUT, StepOutHandler(backend))
         router.registerHandler(DapCommands.PAUSE, PauseHandler(backend))
+        router.registerHandler(DapCommands.DISCONNECT, DisconnectHandler(session, backend))
+        router.registerHandler(DapCommands.TERMINATE, TerminateHandler(session, backend))
     }
 
     private fun shutdownOnce() {
