@@ -1,6 +1,7 @@
 package com.frenchef.intellijlsp.dap.handlers
 
 import com.frenchef.intellijlsp.dap.DapErrors
+import com.frenchef.intellijlsp.dap.DapGson
 import com.frenchef.intellijlsp.dap.DapSession
 import com.frenchef.intellijlsp.dap.model.Capabilities
 import com.frenchef.intellijlsp.dap.model.DapCommands
@@ -23,7 +24,7 @@ class InitializeHandler(private val session: DapSession) : DapRequestHandler {
             throw DapErrors.internalError("Initialize state transition failed")
         }
 
-        return gson.toJsonTree(capabilities)
+        return DapGson.instance.toJsonTree(capabilities)
     }
 
     private fun buildServerCapabilities(): Capabilities {
