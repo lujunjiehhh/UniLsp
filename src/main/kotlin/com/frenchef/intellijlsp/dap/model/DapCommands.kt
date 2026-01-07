@@ -30,4 +30,7 @@ object DapEvents {
     const val CONTINUED = "continued"
     const val THREAD = "thread"
     const val BREAKPOINT = "breakpoint"
+    const val OUTPUT = "output"
+    const val EXITED = "exited"
+    const val TERMINATED = "terminated"
 }

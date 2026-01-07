@@ -24,8 +24,11 @@ import com.frenchef.intellijlsp.dap.model.BreakpointEventBody
 import com.frenchef.intellijlsp.dap.model.ContinuedEventBody
 import com.frenchef.intellijlsp.dap.model.DapErrorId
 import com.frenchef.intellijlsp.dap.model.DapException
+import com.frenchef.intellijlsp.dap.model.ExitedEventBody
 import com.frenchef.intellijlsp.dap.model.InitializedEventBody
+import com.frenchef.intellijlsp.dap.model.OutputEventBody
 import com.frenchef.intellijlsp.dap.model.StoppedEventBody
+import com.frenchef.intellijlsp.dap.model.TerminatedEventBody
 import com.frenchef.intellijlsp.dap.model.ThreadEventBody
 import com.frenchef.intellijlsp.protocol.MessageReader
 import com.frenchef.intellijlsp.protocol.MessageWriter
@@ -168,15 +171,63 @@ class DapServer(
             line: Int?,
             column: Int?
         ) {
-            log.debug("Output event received: category=$category, outputLength=${output.length}")
+            if (!running.get()) {
+                return
+            }
+
+            val body = OutputEventBody(
+                category = category,
+                output = output,
+                source = source,
+                line = line,
+                column = column
+            )
+            scope.launch {
+                sendEvent(
+                    DapEvent(
+                        seq = session.nextSeq(),
+                        event = DapEvents.OUTPUT,
+                        body = DapGson.instance.toJsonTree(body)
+                    )
+                )
+            }
         }
 
         override fun onExited(exitCode: Int) {
-            log.debug("Exited event received: exitCode=$exitCode")
+            if (!running.get()) {
+                return
+            }
+
+            val body = ExitedEventBody(exitCode)
+            scope.launch {
+                sendEvent(
+                    DapEvent(
+                        seq = session.nextSeq(),
+                        event = DapEvents.EXITED,
+                        body = DapGson.instance.toJsonTree(body)
+                    )
+                )
+            }
         }
 
         override fun onTerminated(restart: Boolean?) {
-            log.debug("Terminated event received: restart=$restart")
+            if (!running.get()) {
+                return
+            }
+
+            session.onTerminated()
+            val body = TerminatedEventBody(
+                restart = restart?.let { DapGson.instance.toJsonTree(it) }
+            )
+            scope.launch {
+                sendEvent(
+                    DapEvent(
+                        seq = session.nextSeq(),
+                        event = DapEvents.TERMINATED,
+                        body = DapGson.instance.toJsonTree(body)
+                    )
+                )
+            }
         }
 
         override fun onBreakpoint(
