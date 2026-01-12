@@ -9,6 +9,13 @@ import com.frenchef.intellijlsp.dap.model.*
  * This interface defines the contract between DAP handlers and the actual debugger implementation.
  */
 interface DebuggerBackend {
+    /**
+     * Release backend resources associated with a single DAP connection.
+     *
+     * This should NOT stop an existing IntelliJ debug session; it only detaches listeners,
+     * clears caches, and frees resources to avoid leaks when the transport is closed.
+     */
+    fun dispose() {}
     
     // ========================================================================
     // Session Lifecycle
@@ -41,6 +48,13 @@ interface DebuggerBackend {
      * Terminate the debug session.
      */
     suspend fun terminate()
+
+    /**
+     * Restart the debug session, if supported.
+     *
+     * Implementations should restart using the last known launch/attach configuration when possible.
+     */
+    suspend fun restart()
     
     // ========================================================================
     // Breakpoints
@@ -146,6 +160,25 @@ interface DebuggerBackend {
         levels: Int?,
         format: StackFrameFormat?
     ): Pair<List<StackFrame>, Int?>
+
+    /**
+     * Get exception details for a stopped thread.
+     */
+    suspend fun getExceptionInfo(threadId: Int): ExceptionInfoResponseBody
+
+    // ========================================================================
+    // Modules and Loaded Sources
+    // ========================================================================
+
+    /**
+     * Get modules for the debug session (or project) for the 'modules' request.
+     */
+    suspend fun getModules(startModule: Int?, moduleCount: Int?): ModulesResponseBody
+
+    /**
+     * Get currently loaded sources for the 'loadedSources' request.
+     */
+    suspend fun getLoadedSources(): LoadedSourcesResponseBody
     
     // ========================================================================
     // Scope and Variable Information
@@ -176,6 +209,16 @@ interface DebuggerBackend {
         count: Int?,
         format: ValueFormat?
     ): List<Variable>
+
+    /**
+     * Set the value of a variable in the specified container.
+     */
+    suspend fun setVariable(
+        variablesReference: Int,
+        name: String,
+        value: String,
+        format: ValueFormat?
+    ): SetVariableResponseBody
     
     /**
      * Evaluate an expression.
@@ -192,6 +235,18 @@ interface DebuggerBackend {
         context: String?,
         format: ValueFormat?
     ): EvaluateResponseBody
+
+    // ========================================================================
+    // Source
+    // ========================================================================
+
+    /**
+     * Get the content of a source file.
+     *
+     * @param source The source descriptor (typically includes absolute path)
+     * @param sourceReference A non-file reference (optional; not always used)
+     */
+    suspend fun getSource(source: Source?, sourceReference: Int?): SourceResponseBody
     
     // ========================================================================
     // Event Listener
@@ -201,6 +256,11 @@ interface DebuggerBackend {
      * Set the event listener for debugger events.
      */
     fun setEventListener(listener: DebuggerEventListener?)
+
+    /**
+     * Set the active project for this backend.
+     */
+    fun setActiveProject(project: com.intellij.openapi.project.Project)
 }
 
 /**
