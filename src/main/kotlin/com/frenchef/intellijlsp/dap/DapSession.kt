@@ -2,6 +2,7 @@ package com.frenchef.intellijlsp.dap
 
 import com.frenchef.intellijlsp.dap.model.*
 import com.intellij.openapi.diagnostic.logger
+import com.intellij.openapi.project.Project
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
@@ -58,6 +59,9 @@ class DapSession {
     
     // Current stopped thread (when in STOPPED state)
     private var stoppedThreadId: Int? = null
+    
+    // The active IntelliJ project for this session
+    private var activeProject: Project? = null
     
     /**
      * Get the current session state.
@@ -119,6 +123,19 @@ class DapSession {
      * Get the currently stopped thread ID.
      */
     fun getStoppedThreadId(): Int? = stoppedThreadId
+
+    /**
+     * Get the active project for this session.
+     */
+    fun getActiveProject(): Project? = activeProject
+
+    /**
+     * Set the active project for this session.
+     */
+    fun setActiveProject(project: Project) {
+        log.info("Project activated for session: ${project.name} (${project.basePath})")
+        this.activeProject = project
+    }
     
     // ========================================================================
     // State Transitions
@@ -257,6 +274,7 @@ class DapSession {
         linesStartAt1 = true
         columnsStartAt1 = true
         stoppedThreadId = null
+        activeProject = null
         log.info("Session reset to UNINITIALIZED")
     }
 }

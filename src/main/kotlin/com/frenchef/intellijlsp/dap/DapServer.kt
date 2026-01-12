@@ -9,12 +9,20 @@ import com.frenchef.intellijlsp.dap.handlers.ConfigurationDoneHandler
 import com.frenchef.intellijlsp.dap.handlers.DapRequestRouter
 import com.frenchef.intellijlsp.dap.handlers.DisconnectHandler
 import com.frenchef.intellijlsp.dap.handlers.EvaluateHandler
+import com.frenchef.intellijlsp.dap.handlers.ExceptionInfoHandler
 import com.frenchef.intellijlsp.dap.handlers.InitializeHandler
+import com.frenchef.intellijlsp.dap.handlers.LoadedSourcesHandler
 import com.frenchef.intellijlsp.dap.handlers.LaunchHandler
+import com.frenchef.intellijlsp.dap.handlers.ModulesHandler
 import com.frenchef.intellijlsp.dap.handlers.NextHandler
 import com.frenchef.intellijlsp.dap.handlers.PauseHandler
+import com.frenchef.intellijlsp.dap.handlers.RestartHandler
 import com.frenchef.intellijlsp.dap.handlers.ScopesHandler
 import com.frenchef.intellijlsp.dap.handlers.SetBreakpointsHandler
+import com.frenchef.intellijlsp.dap.handlers.SetExceptionBreakpointsHandler
+import com.frenchef.intellijlsp.dap.handlers.SetFunctionBreakpointsHandler
+import com.frenchef.intellijlsp.dap.handlers.SetVariableHandler
+import com.frenchef.intellijlsp.dap.handlers.SourceHandler
 import com.frenchef.intellijlsp.dap.handlers.StackTraceHandler
 import com.frenchef.intellijlsp.dap.handlers.StepInHandler
 import com.frenchef.intellijlsp.dap.handlers.StepOutHandler
@@ -398,11 +406,13 @@ class DapServer(
     }
 
     private fun registerHandlers() {
-        router.registerHandler(DapCommands.INITIALIZE, InitializeHandler(session))
+        router.registerHandler(DapCommands.INITIALIZE, InitializeHandler(session, backend))
         router.registerHandler(DapCommands.CONFIGURATION_DONE, ConfigurationDoneHandler(session))
         router.registerHandler(DapCommands.LAUNCH, LaunchHandler(backend))
         router.registerHandler(DapCommands.ATTACH, AttachHandler(backend))
         router.registerHandler(DapCommands.SET_BREAKPOINTS, SetBreakpointsHandler(backend))
+        router.registerHandler(DapCommands.SET_FUNCTION_BREAKPOINTS, SetFunctionBreakpointsHandler(backend))
+        router.registerHandler(DapCommands.SET_EXCEPTION_BREAKPOINTS, SetExceptionBreakpointsHandler(backend))
         router.registerHandler(DapCommands.THREADS, ThreadsHandler(backend))
         router.registerHandler(DapCommands.STACK_TRACE, StackTraceHandler(backend))
         router.registerHandler(DapCommands.CONTINUE, ContinueHandler(backend))
@@ -413,6 +423,12 @@ class DapServer(
         router.registerHandler(DapCommands.SCOPES, ScopesHandler(backend))
         router.registerHandler(DapCommands.VARIABLES, VariablesHandler(backend))
         router.registerHandler(DapCommands.EVALUATE, EvaluateHandler(backend))
+        router.registerHandler(DapCommands.SOURCE, SourceHandler(backend))
+        router.registerHandler(DapCommands.SET_VARIABLE, SetVariableHandler(backend))
+        router.registerHandler(DapCommands.MODULES, ModulesHandler(backend))
+        router.registerHandler(DapCommands.LOADED_SOURCES, LoadedSourcesHandler(backend))
+        router.registerHandler(DapCommands.EXCEPTION_INFO, ExceptionInfoHandler(backend))
+        router.registerHandler(DapCommands.RESTART, RestartHandler(backend))
         router.registerHandler(DapCommands.DISCONNECT, DisconnectHandler(session, backend))
         router.registerHandler(DapCommands.TERMINATE, TerminateHandler(session, backend))
     }
@@ -427,16 +443,14 @@ class DapServer(
 
     private fun shutdownInternal() {
         try {
-            if (!session.isTerminated()) {
-                runBlocking {
-                    backend.disconnect(false)
-                }
-            }
+            // Do NOT stop the underlying IntelliJ debug session on transport close.
+            // Only an explicit DAP "disconnect"/"terminate" should end the debug session.
             session.reset()
         } catch (e: Exception) {
             DapErrors.logInternalError("Error during DAP shutdown", e)
         } finally {
             backend.setEventListener(null)
+            backend.dispose()
             if (closeStreamsOnShutdown) {
                 try {
                     input.close()

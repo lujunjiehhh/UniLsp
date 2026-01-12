@@ -1,5 +1,8 @@
 package com.frenchef.intellijlsp.dap
 
+import com.frenchef.intellijlsp.config.TransportMode
+import com.frenchef.intellijlsp.dap.services.DapDiscovery
+import com.frenchef.intellijlsp.dap.services.DapPortAllocator
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.CoroutineScope
@@ -35,23 +38,36 @@ class DapServerStarter(private val project: Project) {
     private val stdioLock = Any()
 
     /**
-     * Start TCP DAP server on the given port.
+     * Start TCP DAP server on the given port (auto-increments if the port is busy).
      */
     fun startTcp(port: Int = 5005): Boolean {
+        if (tcpServerSocket.get() != null) {
+            log.warn("DAP TCP server already running")
+            return false
+        }
+
+        val allocatedPort = DapPortAllocator.allocatePort(project.name, port)
+            ?: run {
+                log.error("Failed to allocate DAP TCP port for project: ${project.name}")
+                return false
+            }
+
         return try {
-            val socket = ServerSocket(port, 50, InetAddress.getLoopbackAddress())
+            val socket = ServerSocket(allocatedPort, 50, InetAddress.getLoopbackAddress())
             if (!tcpServerSocket.compareAndSet(null, socket)) {
                 try {
                     socket.close()
                 } catch (closeError: Exception) {
                     log.warn("Error closing redundant DAP TCP server socket", closeError)
                 }
+                DapPortAllocator.releasePort(allocatedPort)
                 log.warn("DAP TCP server already running")
                 return false
             }
 
             try {
                 ensureAcceptScope().launch { acceptConnections(socket) }
+                DapDiscovery.write(project, TransportMode.TCP, socket.localPort, null)
                 true
             } catch (e: Exception) {
                 if (tcpServerSocket.compareAndSet(socket, null)) {
@@ -61,9 +77,11 @@ class DapServerStarter(private val project: Project) {
                         log.warn("Error closing DAP TCP server socket after failure", closeError)
                     }
                 }
+                DapPortAllocator.releasePort(allocatedPort)
                 throw e
             }
         } catch (e: Exception) {
+            DapPortAllocator.releasePort(allocatedPort)
             DapErrors.logTransportError("Failed to start DAP TCP server", e)
             false
         }
@@ -84,6 +102,7 @@ class DapServerStarter(private val project: Project) {
         }
 
         udsServer = server
+        DapDiscovery.write(project, TransportMode.UDS, null, server.getSocketPath())
         return true
     }
 
@@ -113,11 +132,13 @@ class DapServerStarter(private val project: Project) {
      */
     fun stop() {
         tcpServerSocket.getAndSet(null)?.let { socket ->
+            val port = socket.localPort
             try {
                 socket.close()
             } catch (e: Exception) {
                 log.warn("Error closing DAP TCP server socket", e)
             }
+            DapPortAllocator.releasePort(port)
         }
 
         val clientsSnapshot = tcpClients.values.toList()
@@ -136,6 +157,8 @@ class DapServerStarter(private val project: Project) {
             acceptScope?.cancel()
             acceptScope = null
         }
+
+        DapDiscovery.clear(project)
     }
 
     fun isRunning(): Boolean {
