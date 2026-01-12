@@ -14,9 +14,15 @@ import java.nio.file.Path
 import java.nio.file.Paths
 
 /** Handles LSP lifecycle methods: initialize, initialized, shutdown, exit. */
-class LifecycleHandler(private val project: Project, private val jsonRpcHandler: JsonRpcHandler) {
+class LifecycleHandler(private var project: Project, private val jsonRpcHandler: JsonRpcHandler) {
     private val log = logger<LifecycleHandler>()
     private val gson = LspGson.instance
+
+    private var server: com.frenchef.intellijlsp.server.LspServer? = null
+
+    fun setServer(server: com.frenchef.intellijlsp.server.LspServer) {
+        this.server = server
+    }
 
     @Volatile
     private var initialized = false
@@ -54,6 +60,51 @@ class LifecycleHandler(private val project: Project, private val jsonRpcHandler:
 
         log.info("Client root URI: ${initParams.rootUri}")
         log.info("Client capabilities received")
+
+        // Project activation
+        var targetFolder: String? = null
+        if (initParams.initializationOptions?.isJsonObject == true) {
+            val options = initParams.initializationOptions.asJsonObject
+            if (options.has("projectFolder")) {
+                targetFolder = options.get("projectFolder").asString
+            }
+        }
+
+        if (targetFolder == null && initParams.rootUri != null) {
+            try {
+                val uri = URI(initParams.rootUri)
+                if (uri.scheme == "file") {
+                    targetFolder = Paths.get(uri).toAbsolutePath().toString()
+                }
+            } catch (e: Exception) {
+                // ignore
+            }
+        }
+
+        if (targetFolder != null) {
+            val finalFolder = targetFolder
+            val matchingProject = com.intellij.openapi.project.ProjectManager.getInstance().openProjects.find { p ->
+                p.basePath?.let {
+                    Paths.get(it).toAbsolutePath().normalize() == Paths.get(finalFolder).toAbsolutePath().normalize()
+                } == true
+            }
+            if (matchingProject != null && matchingProject != project) {
+                log.info("LSP Server switching project to: ${matchingProject.name} (basePath: ${matchingProject.basePath})")
+                
+                // Stop old diagnostics for previous project
+                try {
+                    val oldService = project.getService(com.frenchef.intellijlsp.services.LspProjectService::class.java)
+                    oldService.getDiagnosticsHandler()?.stop()
+                } catch (e: Exception) {
+                    log.warn("Failed to stop diagnostics for old project: ${project.name}", e)
+                }
+
+                this.project = matchingProject
+                jsonRpcHandler.setActiveProject(matchingProject)
+                // Re-register all other handlers for the new project
+                LspHandlerRegistry.registerAll(matchingProject, jsonRpcHandler, server)
+            }
+        }
 
         // Validate that rootUri is within or equal to the project path
         if (!validateRootUri(initParams.rootUri, project.basePath)) {
