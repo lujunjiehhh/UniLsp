@@ -51,3 +51,8 @@ reference-code/
 .kilocode/
 .knowledge/
 .specify/
+
+### tools/dap-client-js ###
+!tools/dap-client-js/bin/
+!tools/dap-client-js/bin/dap-cli.js
+tools/dap-client-js/tmp-*.txt
