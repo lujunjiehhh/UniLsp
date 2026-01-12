@@ -1,11 +1,14 @@
 package com.frenchef.intellijlsp.dap.handlers
 
+import com.frenchef.intellijlsp.dap.DapErrors
 import com.frenchef.intellijlsp.dap.DapGson
 import com.frenchef.intellijlsp.dap.DapSession
 import com.frenchef.intellijlsp.dap.model.*
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.intellij.openapi.diagnostic.logger
+import kotlinx.coroutines.CompletableDeferred
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * DAP Request Router
@@ -20,6 +23,7 @@ class DapRequestRouter(private val session: DapSession) {
     
     // Handler registry
     private val requestHandlers = mutableMapOf<String, DapRequestHandler>()
+    private val pendingRequests = ConcurrentHashMap<Int, PendingRequest>()
     
     /**
      * Register a request handler for a specific command.
@@ -110,7 +114,32 @@ class DapRequestRouter(private val session: DapSession) {
         val command = json.get("command")?.asString
         
         log.debug("Received response for request $requestSeq ($command): success=$success")
-        // TODO: Implement pending request management for reverse requests
+        if (requestSeq == null) {
+            return
+        }
+
+        val pending = pendingRequests.remove(requestSeq)
+        if (pending == null) {
+            log.debug("No pending reverse request for seq=$requestSeq")
+            return
+        }
+
+        val body = json.get("body")
+        if (success) {
+            pending.deferred.complete(body)
+        } else {
+            val message = json.get("message")?.asString ?: "Request failed"
+            pending.deferred.completeExceptionally(DapErrors.internalError(message))
+        }
+    }
+
+    /**
+     * Register a pending reverse request so the response can be matched.
+     */
+    fun registerPendingRequest(requestSeq: Int, command: String): CompletableDeferred<JsonElement?> {
+        val deferred = CompletableDeferred<JsonElement?>()
+        pendingRequests[requestSeq] = PendingRequest(command, System.currentTimeMillis(), deferred)
+        return deferred
     }
     
     /**
@@ -150,6 +179,7 @@ class DapRequestRouter(private val session: DapSession) {
             DapCommands.VARIABLES,
             DapCommands.EVALUATE,
             DapCommands.SET_EXPRESSION,
+            DapCommands.SET_VARIABLE,
             DapCommands.SOURCE,
             DapCommands.EXCEPTION_INFO
         )
@@ -201,6 +231,12 @@ class DapRequestRouter(private val session: DapSession) {
         )
     }
 }
+
+private data class PendingRequest(
+    val command: String,
+    val createdAt: Long,
+    val deferred: CompletableDeferred<JsonElement?>
+)
 
 /**
  * Interface for DAP request handlers.
