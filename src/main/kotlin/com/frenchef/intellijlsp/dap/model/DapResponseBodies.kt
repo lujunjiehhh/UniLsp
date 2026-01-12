@@ -165,6 +165,69 @@ data class EvaluateResponseBody(
 )
 
 // ============================================================================
+// Source Response
+// ============================================================================
+
+/**
+ * Response to 'source' request.
+ */
+data class SourceResponseBody(
+    val content: String,
+    val mimeType: String? = null
+)
+
+// ============================================================================
+// SetVariable Response
+// ============================================================================
+
+/**
+ * Response to 'setVariable' request.
+ */
+data class SetVariableResponseBody(
+    val value: String,
+    val type: String? = null,
+    val variablesReference: Int? = null,
+    val namedVariables: Int? = null,
+    val indexedVariables: Int? = null
+)
+
+// ============================================================================
+// Modules Response
+// ============================================================================
+
+/**
+ * Response to 'modules' request.
+ */
+data class ModulesResponseBody(
+    val modules: List<Module>,
+    val totalModules: Int? = null
+)
+
+// ============================================================================
+// LoadedSources Response
+// ============================================================================
+
+/**
+ * Response to 'loadedSources' request.
+ */
+data class LoadedSourcesResponseBody(
+    val sources: List<Source>
+)
+
+// ============================================================================
+// ExceptionInfo Response
+// ============================================================================
+
+/**
+ * Response to 'exceptionInfo' request.
+ */
+data class ExceptionInfoResponseBody(
+    val exceptionId: String,
+    val description: String? = null,
+    val breakMode: ExceptionBreakMode? = null
+)
+
+// ============================================================================
 // Continue Response
 // ============================================================================
 

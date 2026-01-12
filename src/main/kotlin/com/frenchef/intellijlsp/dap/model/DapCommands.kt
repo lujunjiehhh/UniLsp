@@ -9,6 +9,8 @@ object DapCommands {
     const val LAUNCH = "launch"
     const val ATTACH = "attach"
     const val SET_BREAKPOINTS = "setBreakpoints"
+    const val SET_FUNCTION_BREAKPOINTS = "setFunctionBreakpoints"
+    const val SET_EXCEPTION_BREAKPOINTS = "setExceptionBreakpoints"
     const val THREADS = "threads"
     const val DISCONNECT = "disconnect"
     const val TERMINATE = "terminate"
@@ -22,8 +24,12 @@ object DapCommands {
     const val VARIABLES = "variables"
     const val EVALUATE = "evaluate"
     const val SET_EXPRESSION = "setExpression"
+    const val SET_VARIABLE = "setVariable"
     const val SOURCE = "source"
+    const val MODULES = "modules"
+    const val LOADED_SOURCES = "loadedSources"
     const val EXCEPTION_INFO = "exceptionInfo"
+    const val RESTART = "restart"
 }
 
 object DapEvents {

@@ -34,7 +34,12 @@ data class InitializeRequestArguments(
     val supportsMemoryEvent: Boolean? = null,
     val supportsArgsCanBeInterpretedByShell: Boolean? = null,
     val supportsStartDebuggingRequest: Boolean? = null,
-    val supportsANSIStyling: Boolean? = null
+    val supportsANSIStyling: Boolean? = null,
+    /**
+     * The absolute path to the project folder to activate.
+     * Non-standard extension to support multi-project environments.
+     */
+    val projectFolder: String? = null
 )
 
 enum class PathFormat {
@@ -296,3 +301,58 @@ data class CancelArguments(
     val requestId: Int? = null,
     val progressId: String? = null
 )
+
+// ============================================================================
+// Source Request Arguments
+// ============================================================================
+
+/**
+ * Arguments for 'source' request.
+ */
+data class SourceArguments(
+    val source: Source? = null,
+    val sourceReference: Int? = null
+)
+
+// ============================================================================
+// SetVariable Request Arguments
+// ============================================================================
+
+/**
+ * Arguments for 'setVariable' request.
+ */
+data class SetVariableArguments(
+    val variablesReference: Int,
+    val name: String,
+    val value: String,
+    val format: ValueFormat? = null
+)
+
+// ============================================================================
+// Modules / LoadedSources / ExceptionInfo / Restart
+// ============================================================================
+
+/**
+ * Arguments for 'modules' request.
+ */
+data class ModulesArguments(
+    val startModule: Int? = null,
+    val moduleCount: Int? = null
+)
+
+/**
+ * Arguments for 'loadedSources' request.
+ */
+class LoadedSourcesArguments
+
+/**
+ * Arguments for 'exceptionInfo' request.
+ */
+data class ExceptionInfoArguments(
+    val threadId: Int
+)
+
+/**
+ * Arguments for 'restart' request.
+ */
+class RestartArguments
