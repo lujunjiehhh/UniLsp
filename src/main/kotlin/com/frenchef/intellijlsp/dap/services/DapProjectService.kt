@@ -23,17 +23,36 @@ class DapProjectService(private val project: Project) : Disposable {
 
     fun startTcp(port: Int = 5005): Boolean {
         log.info("Starting DAP TCP server for project: ${project.name}")
-        return serverStarter.startTcp(port)
+        val started = serverStarter.startTcp(port)
+        if (started) {
+            DapDiscovery.write(
+                project,
+                transport = com.frenchef.intellijlsp.config.TransportMode.TCP,
+                port = serverStarter.getPort(),
+                socketPath = null
+            )
+        }
+        return started
     }
 
     fun startUds(socketPath: String = defaultSocketPath()): Boolean {
         log.info("Starting DAP UDS server for project: ${project.name}")
-        return serverStarter.startUds(socketPath)
+        val started = serverStarter.startUds(socketPath)
+        if (started) {
+            DapDiscovery.write(
+                project,
+                transport = com.frenchef.intellijlsp.config.TransportMode.UDS,
+                port = null,
+                socketPath = serverStarter.getSocketPath()
+            )
+        }
+        return started
     }
 
     fun stopServer() {
         log.info("Stopping DAP server for project: ${project.name}")
         serverStarter.stop()
+        DapDiscovery.clear(project)
     }
 
     fun isServerRunning(): Boolean = serverStarter.isRunning()
