@@ -1,0 +1,16 @@
+{
+  "name": "dap-client-js",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "Lightweight DAP client CLI + REPL",
+  "bin": {
+    "dap-cli": "bin/dap-cli.js"
+  },
+  "scripts": {
+    "repl": "node bin/dap-cli.js repl"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
