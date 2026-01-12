@@ -14,7 +14,7 @@ import com.intellij.openapi.project.Project
  * - 接收客户端请求并分发到 handlers
  * - 发送请求到客户端并等待响应
  */
-class JsonRpcHandler(private val project: Project) {
+class JsonRpcHandler(private var project: Project) {
     private val log = logger<JsonRpcHandler>()
     private val gson = LspGson.instance
 
@@ -221,6 +221,19 @@ class JsonRpcHandler(private val project: Project) {
 
     /** 获取 PendingRequestManager（用于 shutdown 时取消所有 pending requests）。 */
     fun getPendingRequestManager(): PendingRequestManager = pendingRequestManager
+
+    /**
+     * Set the active project for this handler.
+     */
+    fun setActiveProject(project: Project) {
+        log.info("LSP JsonRpcHandler switching project to: ${project.name}")
+        this.project = project
+    }
+
+    /**
+     * Get the current project.
+     */
+    fun getProject(): Project = project
 }
 
 /** Interface for request handlers. */
