@@ -19,7 +19,6 @@ object DapGson {
             .registerTypeAdapter(StoppedReason::class.java, StoppedReasonAdapter())
             .registerTypeAdapter(ChecksumAlgorithm::class.java, ChecksumAlgorithmSerializer())
             .registerTypeAdapter(OutputGroup::class.java, OutputGroupSerializer())
-            .serializeNulls()
             .create()
     }
     
