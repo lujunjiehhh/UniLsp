@@ -2,7 +2,8 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/reference-code/draw-graph" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/samples" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/IntellijLsp" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/reference-code/intellij-community" vcs="" />
+    <mapping directory="$PROJECT_DIR$/samples" vcs="" />
   </component>
 </project>
