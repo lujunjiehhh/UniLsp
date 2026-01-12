@@ -57,9 +57,18 @@
 
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
+    <extensions defaultExtensionNs="org.jetbrains.kotlin">
+        <!-- Declare K1/K2 compatibility for older IDE versions/Kotlin plugin versions -->
+        <supportsKotlinPluginMode supportsK1="true" supportsK2="true"/>
+    </extensions>
+
     <extensions defaultExtensionNs="com.intellij">
+        <!-- Declare K2 mode compatibility (New way) -->
+        <kotlin.supportsKotlinK2Mode/>
+
         <!-- Application-level settings service -->
         <applicationService serviceImplementation="com.frenchef.intellijlsp.config.LspSettings"/>
+        <applicationService serviceImplementation="com.frenchef.intellijlsp.dap.config.DapSettings"/>
         
         <!-- Settings UI -->
         <applicationConfigurable
@@ -67,14 +76,23 @@
                 instance="com.frenchef.intellijlsp.config.LspConfigurable"
                 id="com.frenchef.intellijlsp.config.LspConfigurable"
                 displayName="IntelliJ LSP Server"/>
+        <applicationConfigurable
+                parentId="tools"
+                instance="com.frenchef.intellijlsp.dap.config.DapConfigurable"
+                id="com.frenchef.intellijlsp.dap.config.DapConfigurable"
+                displayName="IntelliJ DAP Server"/>
         
         <!-- Project-level service -->
         <projectService serviceImplementation="com.frenchef.intellijlsp.services.LspProjectService"/>
         
         <!-- Startup activity to auto-start LSP server -->
         <postStartupActivity implementation="com.frenchef.intellijlsp.LspServerStartupActivity"/>
+
+        <!-- Startup activity to auto-start DAP server -->
+        <postStartupActivity implementation="com.frenchef.intellijlsp.dap.DapServerStartupActivity"/>
         
         <!-- Status bar widget -->
         <statusBarWidgetFactory implementation="com.frenchef.intellijlsp.ui.LspStatusWidgetFactory"/>
     </extensions>
 </idea-plugin>
+    

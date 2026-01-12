@@ -1,6 +1,6 @@
 plugins {
     id("java")
-    id("org.jetbrains.kotlin.jvm") version "2.1.0"
+    id("org.jetbrains.kotlin.jvm") version "2.3.0"
     id("org.jetbrains.intellij.platform") version "2.7.1"
 }
 
@@ -17,7 +17,7 @@ repositories {
 // Read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin.html
 dependencies {
     intellijPlatform {
-        create("IU", "2025.1.4.1")
+        create("IU", "2025.3.1")
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
 
         // Add plugin dependencies for Kotlin and Java PSI support
@@ -25,9 +25,10 @@ dependencies {
         bundledPlugin("org.jetbrains.kotlin")
         bundledPlugin("JavaScript")
         // Go plugin is not bundled in all distributions or the gradle plugin fails to find it as bundled.
-        // Explicitly adding it as an external plugin with a version compatible with 251.
-        plugin("org.jetbrains.plugins.go:251.23774.435")
-        plugin("com.jetbrains.rust:251.25410.170")
+        // Explicitly adding it as an external plugin with a version compatible with 253.
+        plugin("org.jetbrains.plugins.go:253.28294.251")
+        // Rust plugin - using the new plugin ID 22407 (the old 8182 is deprecated)
+        plugin("com.jetbrains.rust:253.28294.352")
     }
 
     // Kotlin Coroutines for async I/O
@@ -42,7 +43,7 @@ dependencies {
 intellijPlatform {
     pluginConfiguration {
         ideaVersion {
-            sinceBuild = "251"
+            sinceBuild = "253"
             untilBuild = provider { null } // Allow installation on any future version (silent compatibility)
         }
 
